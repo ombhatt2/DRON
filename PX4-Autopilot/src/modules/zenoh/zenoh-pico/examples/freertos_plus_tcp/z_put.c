@@ -18,10 +18,10 @@
 #define CLIENT_OR_PEER 0  // 0: Client mode; 1: Peer mode
 #if CLIENT_OR_PEER == 0
 #define MODE "client"
-#define CONNECT ""  // If empty, it will scout
+#define LOCATOR ""  // If empty, it will scout
 #elif CLIENT_OR_PEER == 1
 #define MODE "peer"
-#define CONNECT "udp/224.0.0.225:7447"
+#define LOCATOR "udp/224.0.0.225:7447"
 #else
 #error "Unknown Zenoh operation mode. Check CLIENT_OR_PEER value."
 #endif
@@ -33,13 +33,17 @@ void app_main(void) {
     z_owned_config_t config;
     z_config_default(&config);
     zp_config_insert(z_loan_mut(config), Z_CONFIG_MODE_KEY, MODE);
-    if (strcmp(CONNECT, "") != 0) {
-        zp_config_insert(z_loan_mut(config), Z_CONFIG_CONNECT_KEY, CONNECT);
+    if (strcmp(LOCATOR, "") != 0) {
+        if (strcmp(MODE, "client") == 0) {
+            zp_config_insert(z_loan_mut(config), Z_CONFIG_CONNECT_KEY, LOCATOR);
+        } else {
+            zp_config_insert(z_loan_mut(config), Z_CONFIG_LISTEN_KEY, LOCATOR);
+        }
     }
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
+    if (z_open(&s, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         return;
     }
@@ -47,7 +51,7 @@ void app_main(void) {
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_loan_mut(s), NULL) < 0 || zp_start_lease_task(z_loan_mut(s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return;
     }
 
@@ -55,9 +59,9 @@ void app_main(void) {
     z_owned_keyexpr_t ke;
     z_view_keyexpr_t vke;
     z_view_keyexpr_from_str_unchecked(&vke, KEYEXPR);
-    if (z_declare_keyexpr(&ke, z_loan(s), z_loan(vke)) < 0) {
+    if (z_declare_keyexpr(z_loan(s), &ke, z_loan(vke)) < 0) {
         printf("Unable to declare key expression!\n");
-        z_close(z_move(s));
+        z_drop(z_move(s));
         return;
     }
 
@@ -67,7 +71,7 @@ void app_main(void) {
 
     // Create payload
     z_owned_bytes_t payload;
-    z_bytes_serialize_from_str(&payload, VALUE);
+    z_bytes_from_static_str(&payload, VALUE);
 
     if (z_put(z_loan(s), z_loan(ke), z_move(payload), &options) < 0) {
         printf("Oh no! Put has failed...\n");
@@ -78,8 +82,8 @@ void app_main(void) {
     }
 
     // Clean up
-    z_undeclare_keyexpr(z_move(ke), z_loan(s));
-    z_close(z_move(s));
+    z_undeclare_keyexpr(z_loan(s), z_move(ke));
+    z_drop(z_move(s));
 }
 #else
 void app_main(void) {

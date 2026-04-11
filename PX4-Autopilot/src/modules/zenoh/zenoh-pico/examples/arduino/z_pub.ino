@@ -21,20 +21,17 @@
 #define SSID "SSID"
 #define PASS "PASS"
 
-#define CLIENT_OR_PEER 0  // 0: Client mode; 1: Peer mode
-#if CLIENT_OR_PEER == 0
+// Client mode values (comment/uncomment as needed)
 #define MODE "client"
-#define CONNECT ""  // If empty, it will scout
-#elif CLIENT_OR_PEER == 1
-#define MODE "peer"
-#define CONNECT "udp/224.0.0.225:7447#iface=en0"
-#else
-#error "Unknown Zenoh operation mode. Check CLIENT_OR_PEER value."
-#endif
+#define LOCATOR ""  // If empty, it will scout
+// Peer mode values (comment/uncomment as needed)
+// #define MODE "peer"
+// #define LOCATOR "udp/224.0.0.225:7447#iface=en0"
 
 #define KEYEXPR "demo/example/zenoh-pico-pub"
 #define VALUE "[ARDUINO]{ESP32} Publication from Zenoh-Pico!"
 
+z_owned_session_t s;
 z_owned_publisher_t pub;
 static int idx = 0;
 
@@ -58,14 +55,17 @@ void setup() {
     z_owned_config_t config;
     z_config_default(&config);
     zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_MODE_KEY, MODE);
-    if (strcmp(CONNECT, "") != 0) {
-        zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_CONNECT_KEY, CONNECT);
+    if (strcmp(LOCATOR, "") != 0) {
+        if (strcmp(MODE, "client") == 0) {
+            zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_CONNECT_KEY, LOCATOR);
+        } else {
+            zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_LISTEN_KEY, LOCATOR);
+        }
     }
 
     // Open Zenoh session
     Serial.print("Opening Zenoh Session...");
-    z_owned_session_t s;
-    if (z_open(&s, z_config_move(&config)) < 0) {
+    if (z_open(&s, z_config_move(&config), NULL) < 0) {
         Serial.println("Unable to open session!");
         while (1) {
             ;
@@ -73,9 +73,14 @@ void setup() {
     }
     Serial.println("OK");
 
-    // Start the receive and the session lease loop for zenoh-pico
-    zp_start_read_task(z_session_loan_mut(&s), NULL);
-    zp_start_lease_task(z_session_loan_mut(&s), NULL);
+    // Start read and lease tasks for zenoh-pico
+    if (zp_start_read_task(z_session_loan_mut(&s), NULL) < 0 || zp_start_lease_task(z_session_loan_mut(&s), NULL) < 0) {
+        Serial.println("Unable to start read and lease tasks\n");
+        z_session_drop(z_session_move(&s));
+        while (1) {
+            ;
+        }
+    }
 
     // Declare Zenoh publisher
     Serial.print("Declaring publisher for ");
@@ -83,7 +88,7 @@ void setup() {
     Serial.println("...");
     z_view_keyexpr_t ke;
     z_view_keyexpr_from_str_unchecked(&ke, KEYEXPR);
-    if (z_declare_publisher(&pub, z_session_loan(&s), z_view_keyexpr_loan(&ke), NULL) < 0) {
+    if (z_declare_publisher(z_session_loan(&s), &pub, z_view_keyexpr_loan(&ke), NULL) < 0) {
         Serial.println("Unable to declare publisher for key expression!");
         while (1) {
             ;
@@ -108,7 +113,7 @@ void loop() {
 
     // Create payload
     z_owned_bytes_t payload;
-    z_bytes_serialize_from_str(&payload, buf);
+    z_bytes_copy_from_str(&payload, buf);
 
     if (z_publisher_put(z_publisher_loan(&pub), z_bytes_move(&payload), NULL) < 0) {
         Serial.println("Error while publishing data");

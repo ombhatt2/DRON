@@ -22,25 +22,27 @@
 const char *keyexpr = "demo/example/zenoh-pico-queryable";
 const char *value = "Queryable from Pico!";
 
-void query_handler(const z_loaned_query_t *query, void *ctx) {
+void query_handler(z_loaned_query_t *query, void *ctx) {
     (void)(ctx);
     z_view_string_t keystr;
     z_keyexpr_as_view_string(z_query_keyexpr(query), &keystr);
     z_view_string_t params;
     z_query_parameters(query, &params);
-    printf(" >> [Queryable handler] Received Query '%s%.*s'\n", z_string_data(z_view_string_loan(&keystr)),
-           (int)z_view_string_loan(&params)->len, z_view_string_loan(&params)->val);
+    printf(" >> [Queryable handler] Received Query '%.*s%.*s'\n", (int)z_string_len(z_view_string_loan(&keystr)),
+           z_string_data(z_view_string_loan(&keystr)), (int)z_string_len(z_view_string_loan(&params)),
+           z_string_data(z_view_string_loan(&params)));
     // Process value
     z_owned_string_t payload_string;
-    z_bytes_deserialize_into_string(z_query_payload(query), &payload_string);
+    z_bytes_to_string(z_query_payload(query), &payload_string);
     if (z_string_len(z_string_loan(&payload_string)) > 1) {
-        printf("     with value '%s'\n", z_string_data(z_string_loan(&payload_string)));
+        printf("     with value '%.*s'\n", (int)z_string_len(z_string_loan(&payload_string)),
+               z_string_data(z_string_loan(&payload_string)));
     }
     z_string_drop(z_string_move(&payload_string));
 
     // Reply value encoding
     z_owned_bytes_t reply_payload;
-    z_bytes_serialize_from_str(&reply_payload, value);
+    z_bytes_from_static_str(&reply_payload, value);
 
     z_query_reply(query, z_query_keyexpr(query), z_bytes_move(&reply_payload), NULL);
 }
@@ -92,7 +94,7 @@ int main(int argc, char **argv) {
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_config_move(&config)) < 0) {
+    if (z_open(&s, z_config_move(&config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -100,13 +102,13 @@ int main(int argc, char **argv) {
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_session_loan_mut(&s), NULL) < 0 || zp_start_lease_task(z_session_loan_mut(&s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
 
     z_view_keyexpr_t ke;
     if (z_view_keyexpr_from_str(&ke, keyexpr) < 0) {
-        printf("%s is not a valid key expression", keyexpr);
+        printf("%s is not a valid key expression\n", keyexpr);
         return -1;
     }
 
@@ -115,7 +117,7 @@ int main(int argc, char **argv) {
 
     printf("Creating Queryable on '%s'...\n", keyexpr);
     z_owned_queryable_t qable;
-    if (z_declare_queryable(&qable, z_session_loan(&s), z_view_keyexpr_loan(&ke), z_closure_query_move(&callback),
+    if (z_declare_queryable(z_session_loan(&s), &qable, z_view_keyexpr_loan(&ke), z_closure_query_move(&callback),
                             NULL) < 0) {
         printf("Unable to create queryable.\n");
         return -1;
@@ -126,9 +128,9 @@ int main(int argc, char **argv) {
         sleep(1);
     }
 
-    z_undeclare_queryable(z_queryable_move(&qable));
+    z_queryable_drop(z_queryable_move(&qable));
 
-    z_close(z_session_move(&s));
+    z_session_drop(z_session_move(&s));
 
     return 0;
 }

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 
+#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -19,6 +20,7 @@
 #include "zenoh-pico.h"
 #include "zenoh-pico/api/types.h"
 #include "zenoh-pico/collections/string.h"
+#include "zenoh-pico/utils/uuid.h"
 
 #undef NDEBUG
 #include <assert.h>
@@ -47,23 +49,23 @@ z_owned_keyexpr_t rids2[SET];
 volatile unsigned int total = 0;
 
 volatile unsigned int queries = 0;
-void query_handler(const z_loaned_query_t *query, void *arg) {
+void query_handler(z_loaned_query_t *query, void *arg) {
     char *res = (char *)malloc(64);
     snprintf(res, 64, "%s%u", uri, *(unsigned int *)arg);
     printf(">> Received query: %s\t(%u/%u)\n", res, queries, total);
 
-    z_view_string_t k_str;
+    z_view_string_t k_str, res_str;
     z_keyexpr_as_view_string(z_query_keyexpr(query), &k_str);
-    assert(_z_str_eq(z_loan(k_str)->val, res) == true);
+    z_view_string_from_str(&res_str, res);
+    assert(_z_string_equals(z_loan(k_str), z_loan(res_str)));
 
     z_view_string_t pred;
     z_query_parameters(query, &pred);
-    assert(z_loan(pred)->len == strlen(""));
-    assert(strncmp((const char *)z_loan(pred)->val, "", strlen("")) == 0);
+    assert(z_string_len(z_loan(pred)) == 0);
 
     // Reply value encoding
     z_owned_bytes_t reply_payload;
-    z_bytes_serialize_from_str(&reply_payload, res);
+    z_bytes_copy_from_str(&reply_payload, res);
 
     z_query_reply(query, z_query_keyexpr(query), z_move(reply_payload), NULL);
     queries++;
@@ -71,20 +73,21 @@ void query_handler(const z_loaned_query_t *query, void *arg) {
 }
 
 volatile unsigned int replies = 0;
-void reply_handler(const z_loaned_reply_t *reply, void *arg) {
+void reply_handler(z_loaned_reply_t *reply, void *arg) {
     char *res = (char *)malloc(64);
     snprintf(res, 64, "%s%u", uri, *(unsigned int *)arg);
     if (z_reply_is_ok(reply)) {
         const z_loaned_sample_t *sample = z_reply_ok(reply);
         printf(">> Received reply data: %s\t(%u/%u)\n", res, replies, total);
 
-        z_view_string_t k_str;
+        z_view_string_t k_str, res_str;
         z_keyexpr_as_view_string(z_sample_keyexpr(sample), &k_str);
         z_owned_string_t value;
-        z_bytes_deserialize_into_string(z_sample_payload(sample), &value);
+        z_bytes_to_string(z_sample_payload(sample), &value);
         assert(z_string_len(z_loan(value)) == strlen(res));
         assert(strncmp(res, z_string_data(z_loan(value)), strlen(res)) == 0);
-        assert(_z_str_eq(z_loan(k_str)->val, res) == true);
+        z_view_string_from_str(&res_str, res);
+        assert(_z_string_equals(z_loan(k_str), z_loan(res_str)));
 
         replies++;
         z_drop(z_move(value));
@@ -95,36 +98,37 @@ void reply_handler(const z_loaned_reply_t *reply, void *arg) {
 }
 
 volatile unsigned int datas = 0;
-void data_handler(const z_loaned_sample_t *sample, void *arg) {
+void data_handler(z_loaned_sample_t *sample, void *arg) {
     char *res = (char *)malloc(64);
     snprintf(res, 64, "%s%u", uri, *(unsigned int *)arg);
     printf(">> Received data: %s\t(%u/%u)\n", res, datas, total);
 
+    _z_string_t res_str = _z_string_alias_str(res);
     z_view_string_t k_str;
     z_keyexpr_as_view_string(z_sample_keyexpr(sample), &k_str);
     z_owned_slice_t value;
-    z_bytes_deserialize_into_slice(z_sample_payload(sample), &value);
+    z_bytes_to_slice(z_sample_payload(sample), &value);
     size_t payload_len = z_slice_len(z_loan(value));
     assert((payload_len == MSG_LEN) || (payload_len == FRAGMENT_MSG_LEN));
-    assert(_z_str_eq(z_loan(k_str)->val, res) == true);
+    assert(_z_string_equals(z_loan(k_str), &res_str));
 
     datas++;
     z_drop(z_move(value));
     free(res);
 }
 
-_z_string_t format_id(const z_id_t *id) {
-    _z_slice_t id_as_bytes = _z_slice_wrap(id->id, _z_id_len(*id));
-    return _z_string_convert_bytes(&id_as_bytes);
-}
-
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOLBF, 1024);
 
-    assert(argc == 2);
-    (void)(argc);
+    assert(argc >= 2);
 
     int is_reliable = strncmp(argv[1], "tcp", 3) == 0;
+    unsigned int msg_count = MSG;
+    for (int i = 2; i < argc; ++i) {
+        if (strncmp(argv[i], "--msgs=", 7) == 0) {
+            msg_count = (unsigned int)strtoul(argv[i] + 7, NULL, 10);
+        }
+    }
 
     z_owned_config_t config;
     z_config_default(&config);
@@ -133,10 +137,9 @@ int main(int argc, char **argv) {
     for (unsigned int i = 0; i < SET; i++) idx[i] = i;
 
     z_owned_session_t s1;
-    z_open(&s1, z_move(config));
-    assert(z_check(s1));
-    _z_string_t zid1 = format_id(&(_Z_RC_IN_VAL(z_loan(s1))->_local_zid));
-    printf("Session 1 with PID: %s\n", zid1.val);
+    assert(z_open(&s1, z_move(config), NULL) == Z_OK);
+    _z_string_t zid1 = _z_id_to_string(&(_Z_RC_IN_VAL(z_loan(s1))->_local_zid));
+    printf("Session 1 with PID: %.*s\n", (int)_z_string_len(&zid1), _z_string_data(&zid1));
     _z_string_clear(&zid1);
 
     // Start the read session session lease loops
@@ -149,10 +152,10 @@ int main(int argc, char **argv) {
     zp_config_insert(z_loan_mut(config), Z_CONFIG_CONNECT_KEY, argv[1]);
 
     z_owned_session_t s2;
-    z_open(&s2, z_move(config));
-    assert(z_check(s2));
-    _z_string_t zid2 = format_id(&(_Z_RC_IN_VAL(z_loan(s2))->_local_zid));
-    printf("Session 2 with PID: %s\n", zid2.val);
+    assert(z_open(&s2, z_move(config), NULL) == Z_OK);
+    assert(z_internal_check(s2));
+    _z_string_t zid2 = _z_id_to_string(&(_Z_RC_IN_VAL(z_loan(s2))->_local_zid));
+    printf("Session 2 with PID: %.*s\n", (int)_z_string_len(&zid2), _z_string_data(&zid2));
     _z_string_clear(&zid2);
 
     // Start the read session session lease loops
@@ -168,8 +171,9 @@ int main(int argc, char **argv) {
         z_view_keyexpr_t ke;
         z_view_keyexpr_from_str(&ke, s1_res);
         z_owned_keyexpr_t expr;
-        z_declare_keyexpr(&expr, z_loan(s1), z_loan(ke));
-        printf("Declared resource on session 1: %u %s\n", z_loan(expr)->_id, z_loan(expr)->_suffix);
+        z_declare_keyexpr(z_loan(s1), &expr, z_loan(ke));
+        printf("Declared resource on session 1: %u %.*s\n", z_loan(expr)->_id,
+               (int)z_string_len(&z_loan(expr)->_suffix), z_string_data(&z_loan(expr)->_suffix));
         rids1[i] = expr;
     }
 
@@ -180,8 +184,9 @@ int main(int argc, char **argv) {
         z_view_keyexpr_t ke;
         z_view_keyexpr_from_str(&ke, s1_res);
         z_owned_keyexpr_t expr;
-        z_declare_keyexpr(&expr, z_loan(s2), z_loan(ke));
-        printf("Declared resource on session 2: %u %s\n", z_loan(expr)->_id, z_loan(expr)->_suffix);
+        z_declare_keyexpr(z_loan(s2), &expr, z_loan(ke));
+        printf("Declared resource on session 2: %u %.*s\n", z_loan(expr)->_id,
+               (int)z_string_len(&z_loan(expr)->_suffix), z_string_data(&z_loan(expr)->_suffix));
         rids2[i] = expr;
     }
 
@@ -192,7 +197,7 @@ int main(int argc, char **argv) {
         z_owned_closure_sample_t callback;
         z_closure(&callback, data_handler, NULL, &idx[i]);
         z_owned_subscriber_t *sub = (z_owned_subscriber_t *)z_malloc(sizeof(z_owned_subscriber_t));
-        int8_t res = z_declare_subscriber(sub, z_loan(s2), z_loan(rids2[i]), &callback, NULL);
+        z_result_t res = z_declare_subscriber(z_loan(s2), sub, z_loan(rids2[i]), z_move(callback), NULL);
         assert(res == _Z_RES_OK);
         printf("Declared subscription on session 2: %ju %u %s\n", (uintmax_t)z_subscriber_loan(sub)->_entity_id,
                z_loan(rids2[i])->_id, "");
@@ -208,8 +213,8 @@ int main(int argc, char **argv) {
         z_owned_queryable_t *qle = (z_owned_queryable_t *)z_malloc(sizeof(z_owned_queryable_t));
         z_view_keyexpr_t ke;
         z_view_keyexpr_from_str(&ke, s1_res);
-        assert(z_declare_queryable(qle, z_loan(s2), z_loan(ke), &callback, NULL) == _Z_RES_OK);
-        printf("Declared queryable on session 2: %ju %zu %s\n", (uintmax_t)qle->_val._entity_id, (z_zint_t)0, s1_res);
+        assert(z_declare_queryable(z_loan(s2), qle, z_loan(ke), z_move(callback), NULL) == _Z_RES_OK);
+        printf("Declared queryable on session 2: %ju %i %s\n", (uintmax_t)qle->_val._entity_id, 0, s1_res);
         qles2 = _z_list_push(qles2, qle);
     }
 
@@ -218,7 +223,7 @@ int main(int argc, char **argv) {
     // Declare publisher on first session
     for (unsigned int i = 0; i < SET; i++) {
         z_owned_publisher_t *pub = (z_owned_publisher_t *)z_malloc(sizeof(z_owned_publisher_t));
-        if (z_declare_publisher(pub, z_loan(s1), z_loan(rids1[i]), NULL) < 0) {
+        if (z_declare_publisher(z_loan(s1), pub, z_loan(rids1[i]), NULL) < 0) {
             printf("Declared publisher on session 1: %zu\n", z_loan(*pub)->_id);
         }
         pubs1 = _z_list_push(pubs1, pub);
@@ -231,8 +236,8 @@ int main(int argc, char **argv) {
     uint8_t *value = (uint8_t *)z_malloc(len);
     memset(value, 1, MSG_LEN);
 
-    total = MSG * SET;
-    for (unsigned int n = 0; n < MSG; n++) {
+    total = msg_count * SET;
+    for (unsigned int n = 0; n < msg_count; n++) {
         for (unsigned int i = 0; i < SET; i++) {
             z_put_options_t opt;
             z_put_options_default(&opt);
@@ -240,7 +245,7 @@ int main(int argc, char **argv) {
 
             // Create payload
             z_owned_bytes_t payload;
-            z_bytes_serialize_from_slice(&payload, value, len);
+            z_bytes_from_buf(&payload, value, len, NULL, NULL);
 
             z_put(z_loan(s1), z_loan(rids1[i]), z_move(payload), &opt);
             printf("Wrote data from session 1: %u %zu b\t(%u/%u)\n", z_loan(rids1[i])->_id, len, n * SET + (i + 1),
@@ -280,7 +285,7 @@ int main(int argc, char **argv) {
 
                 // Create payload
                 z_owned_bytes_t payload;
-                z_bytes_serialize_from_slice(&payload, value, len);
+                z_bytes_from_buf(&payload, value, len, NULL, NULL);
 
                 z_put(z_loan(s1), z_loan(rids1[i]), z_move(payload), &opt);
                 printf("Wrote fragment data from session 1: %u %zu b\t(%u/%u)\n", z_loan(rids1[i])->_id, len,
@@ -310,8 +315,8 @@ int main(int argc, char **argv) {
             z_closure(&callback, reply_handler, NULL, &idx[i]);
             z_view_keyexpr_t ke;
             z_view_keyexpr_from_str(&ke, s1_res);
-            z_get(z_loan(s1), z_loan(ke), "", &callback, NULL);
-            printf("Queried data from session 1: %zu %s\n", (z_zint_t)0, s1_res);
+            z_get(z_loan(s1), z_loan(ke), "", z_move(callback), NULL);
+            printf("Queried data from session 1: %i %s\n", 0, s1_res);
         }
     }
 
@@ -346,9 +351,9 @@ int main(int argc, char **argv) {
 
     // Undeclare publishers on first session
     while (pubs1) {
-        z_owned_publisher_t *pub = _z_list_head(pubs1);
+        z_owned_publisher_t *pub = _z_list_value(pubs1);
         printf("Undeclared publisher on session 2: %zu\n", z_loan(*pub)->_id);
-        z_undeclare_publisher(z_move(*pub));
+        z_drop(z_move(*pub));
         pubs1 = _z_list_pop(pubs1, _z_noop_elem_free, NULL);
     }
 
@@ -356,18 +361,18 @@ int main(int argc, char **argv) {
 
     // Undeclare subscribers and queryables on second session
     while (subs2) {
-        z_owned_subscriber_t *sub = _z_list_head(subs2);
+        z_owned_subscriber_t *sub = _z_list_value(subs2);
         printf("Undeclared subscriber on session 2: %ju\n", (uintmax_t)sub->_val._entity_id);
-        z_undeclare_subscriber(z_move(*sub));
+        z_drop(z_move(*sub));
         subs2 = _z_list_pop(subs2, _z_noop_elem_free, NULL);
     }
 
     z_sleep_s(SLEEP);
 
     while (qles2) {
-        z_owned_queryable_t *qle = _z_list_head(qles2);
+        z_owned_queryable_t *qle = _z_list_value(qles2);
         printf("Undeclared queryable on session 2: %ju\n", (uintmax_t)qle->_val._entity_id);
-        z_undeclare_queryable(z_move(*qle));
+        z_drop(z_move(*qle));
         qles2 = _z_list_pop(qles2, _z_noop_elem_free, NULL);
     }
 
@@ -376,26 +381,33 @@ int main(int argc, char **argv) {
     // Undeclare resources on both sessions
     for (unsigned int i = 0; i < SET; i++) {
         printf("Undeclared resource on session 1: %u\n", z_loan(rids1[i])->_id);
-        z_undeclare_keyexpr(z_move(rids1[i]), z_loan(s1));
+        z_undeclare_keyexpr(z_loan(s1), z_move(rids1[i]));
     }
 
     z_sleep_s(SLEEP);
 
     for (unsigned int i = 0; i < SET; i++) {
         printf("Undeclared resource on session 2: %u\n", z_loan(rids2[i])->_id);
-        z_undeclare_keyexpr(z_move(rids2[i]), z_loan(s2));
+        z_undeclare_keyexpr(z_loan(s2), z_move(rids2[i]));
     }
 
     z_sleep_s(SLEEP);
 
+    // Stop read and lease tasks for zenoh-pico
+    zp_stop_read_task(z_loan_mut(s1));
+    zp_stop_lease_task(z_loan_mut(s1));
+
+    zp_stop_read_task(z_loan_mut(s2));
+    zp_stop_lease_task(z_loan_mut(s2));
+
     // Close both sessions
     printf("Closing session 1\n");
-    z_close(z_move(s1));
+    z_drop(z_move(s1));
 
     z_sleep_s(SLEEP);
 
     printf("Closing session 2\n");
-    z_close(z_move(s2));
+    z_drop(z_move(s2));
 
     z_free((uint8_t *)value);
     value = NULL;

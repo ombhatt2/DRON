@@ -22,8 +22,7 @@
 _z_msg_ext_t _z_msg_ext_make_unit(uint8_t id) {
     _z_msg_ext_t ext;
 
-    ext._header = 0;
-    ext._header |= (id & _Z_EXT_ID_MASK);
+    ext._header = id & _Z_EXT_ID_MASK;
     ext._header |= _Z_MSG_EXT_ENC_UNIT;
 
     return ext;
@@ -39,8 +38,7 @@ void _z_msg_ext_copy_unit(_z_msg_ext_unit_t *clone, const _z_msg_ext_unit_t *ext
 _z_msg_ext_t _z_msg_ext_make_zint(uint8_t id, _z_zint_t zid) {
     _z_msg_ext_t ext;
 
-    ext._header = 0;
-    ext._header |= (id & _Z_EXT_ID_MASK);
+    ext._header = id & _Z_EXT_ID_MASK;
     ext._header |= _Z_MSG_EXT_ENC_ZINT;
 
     ext._body._zint._val = zid;
@@ -55,11 +53,10 @@ void _z_msg_ext_copy_zint(_z_msg_ext_zint_t *clone, const _z_msg_ext_zint_t *ext
 _z_msg_ext_t _z_msg_ext_make_zbuf(uint8_t id, _z_slice_t zbuf) {
     _z_msg_ext_t ext;
 
-    ext._header = 0;
-    ext._header |= (id & _Z_EXT_ID_MASK);
+    ext._header = id & _Z_EXT_ID_MASK;
     ext._header |= _Z_MSG_EXT_ENC_ZBUF;
 
-    _z_slice_move(&ext._body._zbuf._val, &zbuf);
+    ext._body._zbuf._val = _z_slice_steal(&zbuf);
 
     return ext;
 }
@@ -88,7 +85,7 @@ void _z_msg_ext_copy(_z_msg_ext_t *clone, const _z_msg_ext_t *ext) {
         } break;
 
         default: {
-            _Z_DEBUG("WARNING: Trying to copy message extension with unknown encoding(%d)", enc);
+            _Z_INFO("WARNING: Trying to copy message extension with unknown encoding(%d)", enc);
         } break;
     }
 }
@@ -109,7 +106,7 @@ void _z_msg_ext_clear(_z_msg_ext_t *ext) {
         } break;
 
         default: {
-            _Z_DEBUG("WARNING: Trying to free message extension with unknown encoding(%d)", enc);
+            _Z_INFO("WARNING: Trying to free message extension with unknown encoding(%d)", enc);
         } break;
     }
 }

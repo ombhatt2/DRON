@@ -23,14 +23,12 @@
 #include "vec.h"
 #include "zenoh-pico/protocol/iobuf.h"
 
-inline size_t _z_arc_slice_size(const _z_arc_slice_t *s) {
-    (void)s;
-    return sizeof(_z_arc_slice_t);
-}
-static inline void _z_arc_slice_elem_move(void *dst, void *src) {
-    _z_arc_slice_move((_z_arc_slice_t *)dst, (_z_arc_slice_t *)src);
-}
-_Z_ELEM_DEFINE(_z_arc_slice, _z_arc_slice_t, _z_arc_slice_size, _z_arc_slice_drop, _z_arc_slice_copy)
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+_Z_ELEM_DEFINE(_z_arc_slice, _z_arc_slice_t, _z_arc_slice_size, _z_arc_slice_drop, _z_arc_slice_copy, _z_arc_slice_move,
+               _z_noop_eq, _z_noop_cmp, _z_noop_hash)
 _Z_SVEC_DEFINE(_z_arc_slice, _z_arc_slice_t)
 
 /*-------- Bytes --------*/
@@ -45,37 +43,45 @@ typedef struct {
     _z_arc_slice_svec_t _slices;
 } _z_bytes_t;
 
-_Bool _z_bytes_check(const _z_bytes_t *bytes);
-_z_bytes_t _z_bytes_null(void);
-int8_t _z_bytes_append_bytes(_z_bytes_t *dst, _z_bytes_t *src);
-int8_t _z_bytes_append_slice(_z_bytes_t *dst, _z_arc_slice_t *s);
-int8_t _z_bytes_copy(_z_bytes_t *dst, const _z_bytes_t *src);
+// Warning: None of the sub-types require a non-0 initialization. Add a init function if it changes.
+static inline _z_bytes_t _z_bytes_null(void) { return (_z_bytes_t){0}; }
+static inline void _z_bytes_alias_arc_slice(_z_bytes_t *dst, _z_arc_slice_t *s) {
+    dst->_slices = _z_arc_slice_svec_alias_element(s);
+}
+static inline _z_bytes_t _z_bytes_alias(const _z_bytes_t *src) {
+    if (src == NULL) {
+        return _z_bytes_null();
+    }
+    _z_bytes_t dst;
+    dst._slices = src->_slices;
+    return dst;
+}
+static inline _z_bytes_t _z_bytes_steal(_z_bytes_t *src) {
+    _z_bytes_t b = *src;
+    src->_slices._len = 0;
+    src->_slices._val = NULL;
+    return b;
+}
+static inline size_t _z_bytes_num_slices(const _z_bytes_t *bs) { return _z_arc_slice_svec_len(&bs->_slices); }
+static inline _z_arc_slice_t *_z_bytes_get_slice(const _z_bytes_t *bs, size_t i) {
+    if (i >= _z_bytes_num_slices(bs)) return NULL;
+    return _z_arc_slice_svec_get(&bs->_slices, i);
+}
+static inline void _z_bytes_drop(_z_bytes_t *bytes) { _z_arc_slice_svec_clear(&bytes->_slices); }
+
+bool _z_bytes_check(const _z_bytes_t *bytes);
+z_result_t _z_bytes_append_bytes(_z_bytes_t *dst, _z_bytes_t *src);
+z_result_t _z_bytes_append_slice(_z_bytes_t *dst, _z_arc_slice_t *s);
+z_result_t _z_bytes_copy(_z_bytes_t *dst, const _z_bytes_t *src);
 _z_bytes_t _z_bytes_duplicate(const _z_bytes_t *src);
-void _z_bytes_move(_z_bytes_t *dst, _z_bytes_t *src);
-void _z_bytes_drop(_z_bytes_t *bytes);
+z_result_t _z_bytes_move(_z_bytes_t *dst, _z_bytes_t *src);
 void _z_bytes_free(_z_bytes_t **bs);
-size_t _z_bytes_num_slices(const _z_bytes_t *bs);
-_z_arc_slice_t *_z_bytes_get_slice(const _z_bytes_t *bs, size_t i);
 size_t _z_bytes_len(const _z_bytes_t *bs);
-_Bool _z_bytes_is_empty(const _z_bytes_t *bs);
-int8_t _z_bytes_to_uint8(const _z_bytes_t *bs, uint8_t *u);
-int8_t _z_bytes_to_uint16(const _z_bytes_t *bs, uint16_t *u);
-int8_t _z_bytes_to_uint32(const _z_bytes_t *bs, uint32_t *u);
-int8_t _z_bytes_to_uint64(const _z_bytes_t *bs, uint64_t *u);
-int8_t _z_bytes_to_float(const _z_bytes_t *bs, float *f);
-int8_t _z_bytes_to_double(const _z_bytes_t *bs, double *d);
-int8_t _z_bytes_to_slice(const _z_bytes_t *bytes, _z_slice_t *s);
-int8_t _z_bytes_from_slice(_z_bytes_t *b, _z_slice_t s);
-int8_t _z_bytes_from_uint8(_z_bytes_t *b, uint8_t val);
-int8_t _z_bytes_from_uint16(_z_bytes_t *b, uint16_t val);
-int8_t _z_bytes_from_uint32(_z_bytes_t *b, uint32_t val);
-int8_t _z_bytes_from_uint64(_z_bytes_t *b, uint64_t val);
-int8_t _z_bytes_from_float(_z_bytes_t *b, float val);
-int8_t _z_bytes_from_double(_z_bytes_t *b, double val);
+bool _z_bytes_is_empty(const _z_bytes_t *bs);
+z_result_t _z_bytes_to_slice(const _z_bytes_t *bytes, _z_slice_t *s);
+z_result_t _z_bytes_from_slice(_z_bytes_t *b, _z_slice_t *s);
 size_t _z_bytes_to_buf(const _z_bytes_t *bytes, uint8_t *dst, size_t len);
-int8_t _z_bytes_from_buf(_z_bytes_t *b, const uint8_t *src, size_t len);
-int8_t _z_bytes_serialize_from_pair(_z_bytes_t *out, _z_bytes_t *first, _z_bytes_t *second);
-int8_t _z_bytes_deserialize_into_pair(const _z_bytes_t *bs, _z_bytes_t *first_out, _z_bytes_t *second_out);
+z_result_t _z_bytes_from_buf(_z_bytes_t *b, const uint8_t *src, size_t len);
 _z_slice_t _z_bytes_try_get_contiguous(const _z_bytes_t *bs);
 
 typedef struct {
@@ -86,32 +92,30 @@ typedef struct {
 } _z_bytes_reader_t;
 
 _z_bytes_reader_t _z_bytes_get_reader(const _z_bytes_t *bytes);
-int8_t _z_bytes_reader_seek(_z_bytes_reader_t *reader, int64_t offset, int origin);
+z_result_t _z_bytes_reader_seek(_z_bytes_reader_t *reader, int64_t offset, int origin);
 int64_t _z_bytes_reader_tell(const _z_bytes_reader_t *reader);
-int8_t _z_bytes_reader_read_slices(_z_bytes_reader_t *reader, size_t len, _z_bytes_t *out);
+z_result_t _z_bytes_reader_read_slices(_z_bytes_reader_t *reader, size_t len, _z_bytes_t *out);
 size_t _z_bytes_reader_read(_z_bytes_reader_t *reader, uint8_t *buf, size_t len);
 
 typedef struct {
-    _z_bytes_reader_t _reader;
-} _z_bytes_iterator_t;
-
-_z_bytes_iterator_t _z_bytes_get_iterator(const _z_bytes_t *bytes);
-int8_t _z_bytes_iterator_next(_z_bytes_iterator_t *iter, _z_bytes_t *b);
-
-typedef struct {
-    uint8_t *cache;
-    size_t cache_size;
-    _z_bytes_t *bytes;
+    _z_arc_slice_t *cache;
+    _z_bytes_t bytes;
 } _z_bytes_writer_t;
 
-_z_bytes_writer_t _z_bytes_get_writer(_z_bytes_t *bytes, size_t cache_size);
-int8_t _z_bytes_writer_write(_z_bytes_writer_t *writer, const uint8_t *src, size_t len);
-int8_t _z_bytes_writer_ensure_cache(_z_bytes_writer_t *writer);
+bool _z_bytes_writer_is_empty(const _z_bytes_writer_t *writer);
+bool _z_bytes_writer_check(const _z_bytes_writer_t *writer);
+_z_bytes_writer_t _z_bytes_writer_from_bytes(_z_bytes_t *bytes);
+_z_bytes_writer_t _z_bytes_writer_empty(void);
+z_result_t _z_bytes_writer_write_all(_z_bytes_writer_t *writer, const uint8_t *src, size_t len);
+z_result_t _z_bytes_writer_append_z_bytes(_z_bytes_writer_t *writer, _z_bytes_t *bytes);
+z_result_t _z_bytes_writer_append_slice(_z_bytes_writer_t *writer, _z_arc_slice_t *bytes);
+_z_bytes_t _z_bytes_writer_finish(_z_bytes_writer_t *writer);
+void _z_bytes_writer_clear(_z_bytes_writer_t *writer);
+z_result_t _z_bytes_writer_move(_z_bytes_writer_t *dst, _z_bytes_writer_t *src);
+size_t _z_bytes_reader_remaining(const _z_bytes_reader_t *reader);
 
-typedef struct {
-    _z_bytes_writer_t writer;
-} _z_bytes_iterator_writer_t;
+#ifdef __cplusplus
+}
+#endif
 
-_z_bytes_iterator_writer_t _z_bytes_get_iterator_writer(_z_bytes_t *bytes);
-int8_t _z_bytes_iterator_writer_write(_z_bytes_iterator_writer_t *writer, _z_bytes_t *bytes);
 #endif /* ZENOH_PICO_COLLECTIONS_BYTES_H */

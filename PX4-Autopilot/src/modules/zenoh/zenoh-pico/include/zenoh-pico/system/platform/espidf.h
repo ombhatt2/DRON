@@ -22,6 +22,10 @@
 
 #include "zenoh-pico/config.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if Z_FEATURE_MULTI_THREAD == 1
 #include <pthread.h>
 
@@ -30,7 +34,7 @@ typedef struct {
     UBaseType_t priority;
     size_t stack_depth;
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
-    _Bool static_allocation;
+    bool static_allocation;
     StackType_t *stack_buffer;
     StaticTask_t *task_buffer;
 #endif /* SUPPORT_STATIC_ALLOCATION */
@@ -40,6 +44,7 @@ typedef struct {
     EventGroupHandle_t join_event;
 } _z_task_t;
 typedef pthread_mutex_t _z_mutex_t;
+typedef pthread_mutex_t _z_mutex_rec_t;
 typedef pthread_cond_t _z_condvar_t;
 #endif  // Z_FEATURE_MULTI_THREAD == 1
 
@@ -52,11 +57,7 @@ typedef struct {
         int _fd;
 #endif
 #if Z_FEATURE_LINK_SERIAL == 1
-        struct {
-            uart_port_t _serial;
-            uint8_t *before_cobs;
-            uint8_t *after_cobs;
-        };
+        uart_port_t _serial;
 #endif
     };
 } _z_sys_net_socket_t;
@@ -68,5 +69,9 @@ typedef struct {
 #endif
     };
 } _z_sys_net_endpoint_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZENOH_PICO_SYSTEM_ESPIDF_TYPES_H */

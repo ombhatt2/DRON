@@ -33,7 +33,9 @@ class EscPropellerInputParserClient : public ClientAbstract {
           safe_factor_(kTypeEscPropellerInputParser, obj_idn, kSubSafeFactor),
           flip_negative_(kTypeEscPropellerInputParser, obj_idn, kSubFlipNegative),
           zero_spin_throttle_(kTypeEscPropellerInputParser, obj_idn, kSubZeroSpinThrottle),
-          zero_spin_tolerance_(kTypeEscPropellerInputParser, obj_idn, kSubZeroSpinTolerance){};
+          zero_spin_tolerance_(kTypeEscPropellerInputParser, obj_idn, kSubZeroSpinTolerance)
+          {
+          };
 
     // Client Entries
     // Control commands
@@ -48,24 +50,31 @@ class EscPropellerInputParserClient : public ClientAbstract {
     ClientEntry<float> zero_spin_throttle_;
     ClientEntry<float> zero_spin_tolerance_;
 
-    void ReadMsg(uint8_t* rx_data, uint8_t rx_length) {
-        static const uint8_t kEntryLength              = kSubZeroSpinTolerance + 1;
-        ClientEntryAbstract* entry_array[kEntryLength] = {
-            &mode_,                // 0
-            &raw_value_,           // 1
-            nullptr,               // 2
-            &sign_,                // 3
-            &volts_max_,           // 4
-            &velocity_max_,        // 5
-            &thrust_max_,          // 6
-            &safe_factor_,         // 7
-            &flip_negative_,       // 8
-            &zero_spin_throttle_,  // 9
-            &zero_spin_tolerance_  // 10
-        };
+   uint16_t GetNumberOfClientEntries(){
+	   return kSubZeroSpinTolerance + 1;
+   }
 
-        ParseMsg(rx_data, rx_length, entry_array, kEntryLength);
+  void GetClientEntryList(ClientEntryAbstract ** client_entries){
+    uint16_t num_entries = GetNumberOfClientEntries();
+
+    ClientEntryAbstract* entry_array[num_entries] = {
+        &mode_,                // 0
+        &raw_value_,           // 1
+        nullptr,               // 2
+        &sign_,                // 3
+        &volts_max_,           // 4
+        &velocity_max_,        // 5
+        &thrust_max_,          // 6
+        &safe_factor_,         // 7
+        &flip_negative_,       // 8
+        &zero_spin_throttle_,  // 9
+        &zero_spin_tolerance_  // 10
+    };
+
+    for(uint16_t entry = 0; entry < num_entries; entry++){
+	    client_entries[entry] = entry_array[entry];
     }
+  }
 
    private:
     static const uint8_t kSubMode              = 0;

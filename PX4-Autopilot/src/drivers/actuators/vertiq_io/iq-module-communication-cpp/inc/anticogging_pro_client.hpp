@@ -8,9 +8,9 @@
 
 /*
   Name: anticogging_pro_client.hpp
-  Last update: 2023/06/29 by Ben Quan 
-  Author: Ben Quan 
-  Contributors: 
+  Last update: 2023/06/29 by Ben Quan
+  Author: Ben Quan
+  Contributors:
 */
 
 #ifndef ANTICOGGING_PRO_CLIENT_HPP
@@ -38,22 +38,26 @@ class AnticoggingProClient: public ClientAbstract{
       {};
 
     // Client Entries
-    ClientEntry<uint8_t>  enabled_;      
-    ClientEntry<float>    tau_;          
+    ClientEntry<uint8_t>  enabled_;
+    ClientEntry<float>    tau_;
     ClientEntry<uint8_t>  num_harmonics_;
-    ClientEntry<float>    voltage_;      
-    ClientEntry<uint8_t>  index_;        
-    ClientEntry<uint8_t>  harmonic_;     
-    ClientEntry<float>    a_;            
-    ClientEntry<float>    phase_;        
-    ClientEntry<float>    phase_total_;  
-    ClientEntry<float>    amplitude_;    
+    ClientEntry<float>    voltage_;
+    ClientEntry<uint8_t>  index_;
+    ClientEntry<uint8_t>  harmonic_;
+    ClientEntry<float>    a_;
+    ClientEntry<float>    phase_;
+    ClientEntry<float>    phase_total_;
+    ClientEntry<float>    amplitude_;
     ClientEntry<uint8_t>  max_harmonics_;
 
-    void ReadMsg(uint8_t* rx_data, uint8_t rx_length)
-    {
-      static const uint8_t kEntryLength = kSubMaxHarmonics+1;
-      ClientEntryAbstract* entry_array[kEntryLength] = {
+    uint16_t GetNumberOfClientEntries(){
+      return kSubMaxHarmonics + 1;
+    }
+
+    void GetClientEntryList(ClientEntryAbstract ** client_entries){
+      uint16_t num_entries = GetNumberOfClientEntries();
+
+      ClientEntryAbstract* entry_array[num_entries] = {
         &enabled_,           // 0
         &tau_,               // 1
         &num_harmonics_,     // 2
@@ -67,7 +71,9 @@ class AnticoggingProClient: public ClientAbstract{
         &max_harmonics_      // 10
       };
 
-      ParseMsg(rx_data, rx_length, entry_array, kEntryLength);
+      for(uint16_t entry = 0; entry < num_entries; entry++){
+        client_entries[entry] = entry_array[entry];
+      }
     }
 
   private:

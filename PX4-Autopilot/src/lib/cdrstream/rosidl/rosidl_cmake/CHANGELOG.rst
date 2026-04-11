@@ -2,6 +2,75 @@
 Changelog for package rosidl_cmake
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+4.9.3 (2024-12-20)
+------------------
+
+4.9.2 (2024-11-25)
+------------------
+
+4.9.1 (2024-11-20)
+------------------
+
+4.9.0 (2024-10-03)
+------------------
+
+4.8.1 (2024-06-25)
+------------------
+
+4.8.0 (2024-06-17)
+------------------
+
+4.7.0 (2024-04-26)
+------------------
+
+4.6.0 (2024-04-16)
+------------------
+
+4.5.2 (2024-03-27)
+------------------
+* Improve deprecation notice of rosidl_target_interface to give a hint on how to update the code (`#788 <https://github.com/ros2/rosidl/issues/788>`_)
+* Contributors: Alexis Paques
+
+4.5.1 (2024-02-07)
+------------------
+
+4.5.0 (2023-12-26)
+------------------
+
+4.4.2 (2023-11-06)
+------------------
+
+4.4.1 (2023-10-04)
+------------------
+
+4.4.0 (2023-09-07)
+------------------
+* Add rosidl_find_package_idl helper function (`#754 <https://github.com/ros2/rosidl/issues/754>`_)
+* Contributors: Mike Purvis
+
+4.3.1 (2023-08-21)
+------------------
+
+4.3.0 (2023-07-11)
+------------------
+* Remove unused splitting of .srv files in CMake (`#753 <https://github.com/ros2/rosidl/issues/753>`_)
+* Contributors: Shane Loretz
+
+4.2.0 (2023-06-07)
+------------------
+
+4.1.1 (2023-05-11)
+------------------
+
+4.1.0 (2023-04-28)
+------------------
+
+4.0.0 (2023-04-11)
+------------------
+* Type Description Codegen and Typesupport  (rep2011) (`#727 <https://github.com/ros2/rosidl/issues/727>`_)
+* Type hash in interface codegen (rep2011) (`#722 <https://github.com/ros2/rosidl/issues/722>`_)
+* Contributors: Emerson Knapp
+
 3.4.0 (2023-02-13)
 ------------------
 * [service introspection] generate service_event messages (`#700 <https://github.com/ros2/rosidl/issues/700>`_)

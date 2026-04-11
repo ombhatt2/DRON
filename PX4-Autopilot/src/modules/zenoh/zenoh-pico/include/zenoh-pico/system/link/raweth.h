@@ -21,6 +21,10 @@
 #include "zenoh-pico/protocol/core.h"
 #include "zenoh-pico/system/platform.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if Z_FEATURE_RAWETH_TRANSPORT == 1
 
 // Ethernet types (big endian)
@@ -32,25 +36,26 @@
 // Max frame size
 #define _ZP_MAX_ETH_FRAME_SIZE 1514
 
-// Endpoing config types
+// Endpoint config types
 typedef struct {
     _z_keyexpr_t _keyexpr;
     uint16_t _vlan;  // vlan tag (pcp + dei + id), big endian
     uint8_t _dmac[_ZP_MAC_ADDR_LENGTH];
-    _Bool _has_vlan;
+    bool _has_vlan;
 } _zp_raweth_mapping_entry_t;
 
 void _z_raweth_clear_mapping_entry(_zp_raweth_mapping_entry_t *entry);
 
 _Z_ELEM_DEFINE(_zp_raweth_mapping, _zp_raweth_mapping_entry_t, _z_noop_size, _z_raweth_clear_mapping_entry,
-               _z_noop_copy)
+               _z_noop_copy, _z_noop_move, _z_noop_eq, _z_noop_cmp, _z_noop_hash)
 _Z_ARRAY_DEFINE(_zp_raweth_mapping, _zp_raweth_mapping_entry_t)
 
 typedef struct {
     uint8_t _mac[_ZP_MAC_ADDR_LENGTH];
 } _zp_raweth_whitelist_entry_t;
 
-_Z_ELEM_DEFINE(_zp_raweth_whitelist, _zp_raweth_whitelist_entry_t, _z_noop_size, _z_noop_clear, _z_noop_copy)
+_Z_ELEM_DEFINE(_zp_raweth_whitelist, _zp_raweth_whitelist_entry_t, _z_noop_size, _z_noop_clear, _z_noop_copy,
+               _z_noop_move, _z_noop_eq, _z_noop_cmp, _z_noop_hash)
 _Z_ARRAY_DEFINE(_zp_raweth_whitelist, _zp_raweth_whitelist_entry_t)
 
 // Ethernet header structure type
@@ -79,17 +84,21 @@ typedef struct {
     uint16_t _ethtype;
     uint8_t _dmac[_ZP_MAC_ADDR_LENGTH];
     uint8_t _smac[_ZP_MAC_ADDR_LENGTH];
-    _Bool _has_vlan;
+    bool _has_vlan;
 } _z_raweth_socket_t;
 
-int8_t _z_open_raweth(_z_sys_net_socket_t *sock, const char *interface);
+z_result_t _z_open_raweth(_z_sys_net_socket_t *sock, const char *interface);
 size_t _z_send_raweth(const _z_sys_net_socket_t *sock, const void *buff, size_t buff_len);
 size_t _z_receive_raweth(const _z_sys_net_socket_t *sock, void *buff, size_t buff_len, _z_slice_t *addr,
                          const _zp_raweth_whitelist_array_t *whitelist);
-int8_t _z_close_raweth(_z_sys_net_socket_t *sock);
+z_result_t _z_close_raweth(_z_sys_net_socket_t *sock);
 uint16_t _z_raweth_ntohs(uint16_t val);
 uint16_t _z_raweth_htons(uint16_t val);
 
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* ZENOH_PICO_SYSTEM_LINK_RAWETH_H */

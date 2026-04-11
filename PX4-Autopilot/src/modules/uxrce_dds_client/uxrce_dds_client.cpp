@@ -49,10 +49,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+static constexpr char NAMESPACE_PREFIX[] = "uav_";
 #define PARTICIPANT_XML_SIZE 512
 static constexpr uint8_t TIMESYNC_MAX_TIMEOUTS = 10;
 
 using namespace time_literals;
+
+ModuleBase::Descriptor UxrceddsClient::desc{task_spawn, custom_command, print_usage};
 
 static void on_time(uxrSession *session, int64_t current_time, int64_t client_transmit_timestamp,
 		    int64_t agent_receive_timestamp, int64_t originate_timestamp, void *args)
@@ -836,21 +839,35 @@ bool UxrceddsClient::setBaudrate(int fd, unsigned baud)
 	//
 	uart_config.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
 
-	/* no parity, one stop bit, disable flow control */
-	uart_config.c_cflag &= ~(CSTOPB | PARENB | CRTSCTS);
+	/* no parity, one stop bit */
+	uart_config.c_cflag &= ~(CSTOPB | PARENB);
+
+	/* enable flow control if needed */
+	if (_param_uxrce_dds_flctrl.get() > 0) {
+		uart_config.c_cflag |= CRTSCTS;
+
+	} else {
+		uart_config.c_cflag &= ~CRTSCTS;
+	}
 
 	/* set baud rate */
-	if ((termios_state = cfsetispeed(&uart_config, speed)) < 0) {
+	termios_state = cfsetispeed(&uart_config, speed);
+
+	if (termios_state < 0) {
 		PX4_ERR("ERR: %d (cfsetispeed)", termios_state);
 		return false;
 	}
 
-	if ((termios_state = cfsetospeed(&uart_config, speed)) < 0) {
+	termios_state = cfsetospeed(&uart_config, speed);
+
+	if (termios_state < 0) {
 		PX4_ERR("ERR: %d (cfsetospeed)", termios_state);
 		return false;
 	}
 
-	if ((termios_state = tcsetattr(fd, TCSANOW, &uart_config)) < 0) {
+	termios_state = tcsetattr(fd, TCSANOW, &uart_config);
+
+	if (termios_state < 0) {
 		PX4_ERR("ERR: %d (tcsetattr)", termios_state);
 		return false;
 	}
@@ -905,17 +922,24 @@ int UxrceddsClient::custom_command(int argc, char *argv[])
 	return print_usage("unknown command");
 }
 
+int UxrceddsClient::run_trampoline(int argc, char *argv[])
+{
+	return ModuleBase::run_trampoline_impl(desc, [](int ac, char *av[]) -> ModuleBase * {
+		return UxrceddsClient::instantiate(ac, av);
+	}, argc, argv);
+}
+
 int UxrceddsClient::task_spawn(int argc, char *argv[])
 {
-	_task_id = px4_task_spawn_cmd("uxrce_dds_client",
-				      SCHED_DEFAULT,
-				      SCHED_PRIORITY_DEFAULT,
-				      PX4_STACK_ADJUSTED(8000),
-				      (px4_main_t)&run_trampoline,
-				      (char *const *)argv);
+	desc.task_id = px4_task_spawn_cmd("uxrce_dds_client",
+					  SCHED_DEFAULT,
+					  SCHED_PRIORITY_DEFAULT,
+					  PX4_STACK_ADJUSTED(8000),
+					  (px4_main_t)&run_trampoline,
+					  (char *const *)argv);
 
-	if (_task_id < 0) {
-		_task_id = -1;
+	if (desc.task_id < 0) {
+		desc.task_id = -1;
 		return -errno;
 	}
 
@@ -1028,6 +1052,23 @@ UxrceddsClient *UxrceddsClient::instantiate(int argc, char *argv[])
 		}
 	}
 
+	if (client_namespace == nullptr) {
+		int32_t ns_idx = -1;
+		param_get(param_find("UXRCE_DDS_NS_IDX"), &ns_idx);
+
+		if (ns_idx > -1) {
+			if (ns_idx < 10000) {
+				// Allocate buffer for prefix + '\0' + 4 digits
+				static char client_namespace_buf[sizeof(NAMESPACE_PREFIX) + 4];
+				snprintf(client_namespace_buf, sizeof client_namespace_buf, "%s%u", NAMESPACE_PREFIX, (uint16_t)ns_idx);
+				client_namespace = client_namespace_buf;
+
+			} else {
+				PX4_WARN("namespace index must be between 0 and 9999 inclusive; ignoring index-based namespace");
+			}
+		}
+	}
+
 #if defined(UXRCE_DDS_CLIENT_UDP)
 
 	if (port[0] == '\0') {
@@ -1092,7 +1133,7 @@ $ uxrce_dds_client start -t udp -h 127.0.0.1 -p 15555
 	PRINT_MODULE_USAGE_PARAM_INT('b', 0, 0, 3000000, "Baudrate (can also be p:<param_name>)", true);
 	PRINT_MODULE_USAGE_PARAM_STRING('h', nullptr, "<IP>", "Agent IP. If not provided, defaults to UXRCE_DDS_AG_IP", true);
 	PRINT_MODULE_USAGE_PARAM_INT('p', -1, 0, 65535, "Agent listening port. If not provided, defaults to UXRCE_DDS_PRT", true);
-	PRINT_MODULE_USAGE_PARAM_STRING('n', nullptr, nullptr, "Client DDS namespace", true);
+	PRINT_MODULE_USAGE_PARAM_STRING('n', nullptr, nullptr, "Client DDS namespace. If not provided but UXRCE_DDS_NS_IDX is between 0 and 9999 inclusive, then uav_ + UXRCE_DDS_NS_IDX will be used", true);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 
 	return 0;
@@ -1100,5 +1141,5 @@ $ uxrce_dds_client start -t udp -h 127.0.0.1 -p 15555
 
 extern "C" __EXPORT int uxrce_dds_client_main(int argc, char *argv[])
 {
-	return UxrceddsClient::main(argc, argv);
+	return ModuleBase::main(UxrceddsClient::desc, argc, argv);
 }

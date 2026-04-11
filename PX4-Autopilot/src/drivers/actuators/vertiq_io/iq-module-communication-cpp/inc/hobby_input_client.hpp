@@ -41,10 +41,14 @@ class HobbyInputClient: public ClientAbstract{
     ClientEntry<uint32_t>   calibrated_low_ticks_us_;
     ClientEntryVoid         reset_calibration_;
 
-    void ReadMsg(uint8_t* rx_data, uint8_t rx_length)
-    {
-      static const uint8_t kEntryLength = kSubResetCalibration+1;
-      ClientEntryAbstract* entry_array[kEntryLength] = {
+    uint16_t GetNumberOfClientEntries(){
+      return kSubResetCalibration + 1;
+    }
+
+    void GetClientEntryList(ClientEntryAbstract ** client_entries){
+      uint16_t num_entries = GetNumberOfClientEntries();
+
+      ClientEntryAbstract* entry_array[num_entries] = {
         &allowed_protocols_,        // 0
         &protocol_,                 // 1
         &calibrated_protocol_,      // 2
@@ -53,7 +57,9 @@ class HobbyInputClient: public ClientAbstract{
         &reset_calibration_         // 5
       };
 
-      ParseMsg(rx_data, rx_length, entry_array, kEntryLength);
+      for(uint16_t entry = 0; entry < num_entries; entry++){
+        client_entries[entry] = entry_array[entry];
+      }
     }
 
   private:

@@ -21,6 +21,10 @@
 #include "zenoh-pico/link/endpoint.h"
 #include "zenoh-pico/protocol/definitions/network.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define _Z_MID_SCOUT 0x01
 #define _Z_MID_HELLO 0x02
 
@@ -86,6 +90,16 @@
 //      S Session Close    if S==1 Session close or S==0 Link close
 //      Z Extensions       if Z==1 then Zenoh extensions are present
 #define _Z_FLAG_T_CLOSE_S 0x20  // 1 << 5
+
+/*=============================*/
+/*            Patch            */
+/*=============================*/
+/// Used to negotiate the patch version of the protocol
+/// if not present (or 0), then protocol as released with 1.0.0
+/// if >= 1, then fragmentation start/stop marker
+#define _Z_NO_PATCH 0x00
+#define _Z_CURRENT_PATCH 0x01
+#define _Z_PATCH_HAS_FRAGMENT_MARKERS(patch) (patch >= 1)
 
 /*=============================*/
 /*     Transport Messages      */
@@ -220,7 +234,7 @@ typedef struct {
         _z_coundit_sn_t _plain;
         _z_coundit_sn_t _qos[Z_PRIORITIES_NUM];
     } _val;
-    _Bool _is_qos;
+    bool _is_qos;
 } _z_conduit_sn_list_t;
 typedef struct {
     _z_id_t _zid;
@@ -231,6 +245,9 @@ typedef struct {
     uint8_t _req_id_res;
     uint8_t _seq_num_res;
     uint8_t _version;
+#if Z_FEATURE_FRAGMENTATION == 1
+    uint8_t _patch;
+#endif
 } _z_t_msg_join_t;
 void _z_t_msg_join_clear(_z_t_msg_join_t *msg);
 
@@ -311,6 +328,9 @@ typedef struct {
     uint8_t _req_id_res;
     uint8_t _seq_num_res;
     uint8_t _version;
+#if Z_FEATURE_FRAGMENTATION == 1
+    uint8_t _patch;
+#endif
 } _z_t_msg_init_t;
 void _z_t_msg_init_clear(_z_t_msg_init_t *msg);
 
@@ -444,7 +464,7 @@ void _z_t_msg_keep_alive_clear(_z_t_msg_keep_alive_t *msg);
 // - if R==1 then the FRAME is sent on the reliable channel, best-effort otherwise.
 //
 typedef struct {
-    _z_network_message_vec_t _messages;
+    _z_zbuf_t *_payload;
     _z_zint_t _sn;
 } _z_t_msg_frame_t;
 void _z_t_msg_frame_clear(_z_t_msg_frame_t *msg);
@@ -474,10 +494,10 @@ void _z_t_msg_frame_clear(_z_t_msg_frame_t *msg);
 typedef struct {
     _z_slice_t _payload;
     _z_zint_t _sn;
+    bool first;
+    bool drop;
 } _z_t_msg_fragment_t;
 void _z_t_msg_fragment_clear(_z_t_msg_fragment_t *msg);
-
-#define _Z_FRAGMENT_HEADER_SIZE 12
 
 /*------------------ Transport Message ------------------*/
 typedef union {
@@ -496,6 +516,8 @@ typedef struct {
 } _z_transport_message_t;
 void _z_t_msg_clear(_z_transport_message_t *msg);
 
+z_reliability_t _z_t_msg_get_reliability(_z_transport_message_t *msg);
+
 /*------------------ Builders ------------------*/
 _z_transport_message_t _z_t_msg_make_join(z_whatami_t whatami, _z_zint_t lease, _z_id_t zid,
                                           _z_conduit_sn_list_t next_sn);
@@ -503,12 +525,14 @@ _z_transport_message_t _z_t_msg_make_init_syn(z_whatami_t whatami, _z_id_t zid);
 _z_transport_message_t _z_t_msg_make_init_ack(z_whatami_t whatami, _z_id_t zid, _z_slice_t cookie);
 _z_transport_message_t _z_t_msg_make_open_syn(_z_zint_t lease, _z_zint_t initial_sn, _z_slice_t cookie);
 _z_transport_message_t _z_t_msg_make_open_ack(_z_zint_t lease, _z_zint_t initial_sn);
-_z_transport_message_t _z_t_msg_make_close(uint8_t reason, _Bool link_only);
+_z_transport_message_t _z_t_msg_make_close(uint8_t reason, bool link_only);
 _z_transport_message_t _z_t_msg_make_keep_alive(void);
-_z_transport_message_t _z_t_msg_make_frame(_z_zint_t sn, _z_network_message_vec_t messages, _Bool is_reliable);
-_z_transport_message_t _z_t_msg_make_frame_header(_z_zint_t sn, _Bool is_reliable);
-_z_transport_message_t _z_t_msg_make_fragment_header(_z_zint_t sn, _Bool is_reliable, _Bool is_last);
-_z_transport_message_t _z_t_msg_make_fragment(_z_zint_t sn, _z_slice_t messages, _Bool is_reliable, _Bool is_last);
+_z_transport_message_t _z_t_msg_make_frame(_z_zint_t sn, _z_zbuf_t *payload, z_reliability_t reliability);
+_z_transport_message_t _z_t_msg_make_frame_header(_z_zint_t sn, z_reliability_t reliability);
+_z_transport_message_t _z_t_msg_make_fragment_header(_z_zint_t sn, z_reliability_t reliability, bool is_last,
+                                                     bool first, bool drop);
+_z_transport_message_t _z_t_msg_make_fragment(_z_zint_t sn, _z_slice_t messages, z_reliability_t reliability,
+                                              bool is_last, bool first, bool drop);
 
 /*------------------ Copy ------------------*/
 void _z_t_msg_copy(_z_transport_message_t *clone, _z_transport_message_t *msg);
@@ -536,5 +560,9 @@ _z_scouting_message_t _z_s_msg_make_hello(z_whatami_t whatami, _z_id_t zid, _z_l
 void _z_s_msg_copy(_z_scouting_message_t *clone, _z_scouting_message_t *msg);
 void _z_s_msg_copy_scout(_z_s_msg_scout_t *clone, _z_s_msg_scout_t *msg);
 void _z_s_msg_copy_hello(_z_s_msg_hello_t *clone, _z_s_msg_hello_t *msg);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INCLUDE_ZENOH_PICO_PROTOCOL_DEFINITIONS_TRANSPORT_H */

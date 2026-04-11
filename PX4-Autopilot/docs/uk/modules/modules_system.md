@@ -127,6 +127,10 @@ commander <command> [arguments...]
 
    check         Run preflight checks
 
+   safety        Change prearm safety state
+     on|off      [on] to activate safety, [off] to deactivate safety and allow
+                 control surface movements
+
    arm
      [-f]        Force arming (do not run preflight checks)
 
@@ -140,9 +144,9 @@ commander <command> [arguments...]
    transition    VTOL transition
 
    mode          Change flight mode
-     manual|acro|offboard|stabilized|altctl|posctl|position:slow|auto:mission|au
-                 to:loiter|auto:rtl|auto:takeoff|auto:land|auto:precland|ext1
-                 Flight mode
+     manual|acro|offboard|stabilized|altctl|posctl|altitude_cruise|position:slow
+                 |auto:mission|auto:loiter|auto:rtl|auto:takeoff|auto:land|auto:
+                 precland|ext1 Flight mode
 
    pair
 
@@ -153,6 +157,9 @@ commander <command> [arguments...]
      lat, lon, alt Origin Latitude, Longitude, Altitude
 
    lat|lon|alt   Origin latitude longitude altitude
+
+   set_heading   Set current heading
+     heading     degrees from True North [0 360]
 
    poweroff      Power off board (if supported)
 
@@ -314,7 +321,7 @@ Source: [drivers/heater](https://github.com/PX4/PX4-Autopilot/tree/main/src/driv
 
 ### Опис
 
-Background process running periodically on the LP work queue to regulate IMU temperature at a setpoint.
+Background process running periodically on the INS{i} queue to regulate IMU temperature at a setpoint.
 
 This task can be started at boot from the startup scripts by setting SENS_EN_THERMAL or via CLI.
 
@@ -725,7 +732,7 @@ The module is typically used together with uORB publisher rules, to specify whic
 The replay module will just publish all messages that are found in the log. It also applies the parameters from
 the log.
 
-The replay procedure is documented on the [System-wide Replay](https://docs.px4.io/main/en/debug/system_wide_replay.html)
+The replay procedure is documented on the [System-wide Replay](../debug/system_wide_replay.md)
 page.
 
 ### Usage {#replay_usage}
@@ -914,6 +921,30 @@ system_power_simulation <command> [arguments...]
    status        print status info
 ```
 
+## task_watchdog
+
+Source: [modules/task_watchdog](https://github.com/PX4/PX4-Autopilot/tree/main/src/modules/task_watchdog)
+
+### Опис
+
+Detects when a higher-priority task starves the system by running too long.
+When starvation is detected, dumps the offending task's registers and stack,
+and saves a cpuload snapshot.
+
+### Usage {#task_watchdog_usage}
+
+```
+task_watchdog <command> [arguments...]
+ Commands:
+   start
+
+   trigger       Manually trigger the watchdog
+
+   stop
+
+   status        print status info
+```
+
 ## tattu_can
 
 Source: [drivers/tattu_can](https://github.com/PX4/PX4-Autopilot/tree/main/src/drivers/tattu_can)
@@ -1062,7 +1093,9 @@ uxrce_dds_client <command> [arguments...]
                  values: <IP>
      [-p <val>]  Agent listening port. If not provided, defaults to
                  UXRCE_DDS_PRT
-     [-n <val>]  Client DDS namespace
+     [-n <val>]  Client DDS namespace. If not provided but UXRCE_DDS_NS_IDX is
+                 between 0 and 9999 inclusive, then uav_ + UXRCE_DDS_NS_IDX will
+                 be used
 
    stop
 

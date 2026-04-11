@@ -20,29 +20,77 @@
 #include "zenoh-pico/net/session.h"
 #include "zenoh-pico/protocol/core.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct {
+    uintptr_t peer;
+    uint32_t decl_id;
+} _z_filter_target_t;
+
+typedef z_element_eq_f _z_filter_target_eq_f;
+#define _z_filter_target_elem_copy _z_noop_copy
+#define _z_filter_target_elem_clear _z_noop_clear
+_Z_SLIST_DEFINE(_z_filter_target, _z_filter_target_t, false)
+
 typedef enum {
-    WRITE_FILTER_INIT = 0,
-    WRITE_FILTER_ACTIVE = 1,
-    WRITE_FILTER_OFF = 2,
+    WRITE_FILTER_ACTIVE = 0,
+    WRITE_FILTER_OFF = 1,
 } _z_write_filter_state_t;
 
 typedef struct {
-    uint32_t decl_id;
+    _z_session_weak_t zn;
+#if Z_FEATURE_MULTI_THREAD == 1
+    _z_mutex_t mutex;
+#endif
+    _z_filter_target_slist_t *targets;
+#if Z_FEATURE_MATCHING == 1
+    _z_closure_matching_status_intmap_t callbacks;
+#endif
+    _z_keyexpr_t key;
     uint8_t state;
-} _z_writer_filter_ctx_t;
+    bool is_complete;
+    bool is_aggregate;
+} _z_write_filter_ctx_t;
+
+z_result_t _z_write_filter_ctx_clear(_z_write_filter_ctx_t *filter);
+
+_Z_REFCOUNT_DEFINE_NO_FROM_VAL(_z_write_filter_ctx, _z_write_filter_ctx)
 
 /**
  * Return type when declaring a queryable.
  */
 typedef struct _z_write_filter_t {
     uint32_t _interest_id;
-    _z_writer_filter_ctx_t *ctx;
+    _z_write_filter_ctx_rc_t ctx;
 } _z_write_filter_t;
 
-typedef struct _z_publisher_t _z_publisher_t;
+z_result_t _z_write_filter_create(const _z_session_rc_t *zn, _z_write_filter_t *filter, _z_keyexpr_t keyexpr,
+                                  uint8_t interest_flag, bool complete);
+z_result_t _z_write_filter_clear(_z_write_filter_t *filter);
 
-int8_t _z_write_filter_create(_z_publisher_t *pub);
-int8_t _z_write_filter_destroy(const _z_publisher_t *pub);
-_Bool _z_write_filter_active(const _z_publisher_t *pub);
+#if Z_FEATURE_MATCHING
+z_result_t _z_write_filter_ctx_add_callback(_z_write_filter_ctx_t *filter, size_t id, _z_closure_matching_status_t *v);
+void _z_write_filter_ctx_remove_callback(_z_write_filter_ctx_t *filter, size_t id);
+#endif
+
+#if Z_FEATURE_INTEREST == 1
+static inline bool _z_write_filter_ctx_active(const _z_write_filter_ctx_t *ctx) {
+    return ctx->state == WRITE_FILTER_ACTIVE;
+}
+static inline bool _z_write_filter_active(const _z_write_filter_t *filter) {
+    return _z_write_filter_ctx_active(_Z_RC_IN_VAL(&filter->ctx));
+}
+#else
+static inline bool _z_write_filter_active(const _z_write_filter_t *filter) {
+    _ZP_UNUSED(filter);
+    return false;
+}
+#endif
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZENOH_PICO_FILTERING_NETAPI_H */

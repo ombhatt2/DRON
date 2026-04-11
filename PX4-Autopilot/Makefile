@@ -162,6 +162,12 @@ else
 
 endif
 
+# Prefer the interpreter from an active Python virtual environment.
+# Otherwise leave PYTHON_EXECUTABLE unset and let CMake resolve Python.
+ifneq ($(strip $(VIRTUAL_ENV)),)
+	PYTHON_EXECUTABLE ?= $(VIRTUAL_ENV)/bin/python
+endif
+
 # Pick up specific Python path if set
 ifdef PYTHON_EXECUTABLE
 	override CMAKE_ARGS += -DPYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
@@ -226,8 +232,21 @@ CONFIG_TARGETS_DEFAULT := $(patsubst %_default,%,$(filter %_default,$(ALL_CONFIG
 $(CONFIG_TARGETS_DEFAULT):
 	@$(call cmake-build,$@_default$(BUILD_DIR_SUFFIX))
 
+# Multi-processor boards: build all processor targets together
+# VOXL2 apps processor (default) depends on SLPI DSP being built first
+modalai_voxl2_default: modalai_voxl2_slpi
+modalai_voxl2: modalai_voxl2_slpi
+modalai_voxl2_deb: modalai_voxl2_slpi
+
 all_config_targets: $(ALL_CONFIG_TARGETS)
 all_default_targets: $(CONFIG_TARGETS_DEFAULT)
+
+# DEB package targets: builds _default config, then runs cpack.
+# Multi-processor boards (e.g. VOXL2) chain companion builds automatically
+# via existing cmake prerequisites.
+%_deb:
+	@$(call cmake-build,$(subst _deb,_default,$@)$(BUILD_DIR_SUFFIX))
+	@cd "$(SRC_DIR)/build/$(subst _deb,_default,$@)" && cpack -G DEB
 
 updateconfig:
 	@./Tools/kconfig/updateconfig.py
@@ -325,10 +344,14 @@ bootloaders_update: \
 	ark_fmu-v6x_bootloader \
 	ark_fpv_bootloader \
 	ark_pi6x_bootloader \
+	auterion_fmu-v6s_bootloader \
+	auterion_fmu-v6x_bootloader \
 	cuav_nora_bootloader \
 	cuav_x7pro_bootloader \
 	cuav_7-nano_bootloader \
+	cuav_fmu-v6x_bootloader \
 	cuav_x25-evo_bootloader \
+	cuav_x25-super_bootloader \
 	cubepilot_cubeorange_bootloader \
 	cubepilot_cubeorangeplus_bootloader \
 	hkust_nxt-dual_bootloader \
@@ -343,6 +366,7 @@ bootloaders_update: \
         micoair_h743_bootloader \
         micoair_h743-aio_bootloader \
 	micoair_h743-v2_bootloader \
+	micoair_h743-lite_bootloader \
 	modalai_fc-v2_bootloader \
 	mro_ctrl-zero-classic_bootloader \
 	mro_ctrl-zero-h7_bootloader \
@@ -408,7 +432,7 @@ tests:
 	$(call cmake-build,px4_sitl_test)
 
 # work around lcov bug #316; remove once lcov is fixed (see https://github.com/linux-test-project/lcov/issues/316)
-LCOBUG = --ignore-errors mismatch
+LCOBUG = --ignore-errors mismatch,negative
 tests_coverage:
 	@$(MAKE) clean
 	@$(MAKE) --no-print-directory tests PX4_CMAKE_BUILD_TYPE=Coverage
@@ -488,13 +512,29 @@ px4_sitl_default-clang:
 	@cd "$(SRC_DIR)"/build/px4_sitl_default-clang && cmake "$(SRC_DIR)" $(CMAKE_ARGS) -G"$(PX4_CMAKE_GENERATOR)" -DCONFIG=px4_sitl_default -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 	@$(PX4_MAKE) -C "$(SRC_DIR)"/build/px4_sitl_default-clang
 
+# Paths to exclude from clang-tidy (auto-generated from .gitmodules + manual additions):
+# - All submodules (external code we consume, not edit)
+# - Test code (allowed looser style)
+# - Example code (educational, not production)
+# - Vendored third-party code (e.g., CMSIS_5)
+# - NuttX-only drivers excluded at CMake level (mcp_common); I2C-dependent libs excluded here (smbus)
+# - GPIO excluded here (NuttX platform headers)
+# - Emscripten failsafe web build: source path + Unity build path (failsafe_test.dir)
+#   because CMake Unity Builds merge sources into a generated .cxx under build/
+#
+# To add manual exclusions, append to CLANG_TIDY_EXCLUDE_EXTRA below.
+# Submodules are automatically excluded - no action needed when adding new ones.
+CLANG_TIDY_SUBMODULES := $(shell git config --file .gitmodules --get-regexp path | awk '{print $$2}' | tr '\n' '|' | sed 's/|$$//')
+CLANG_TIDY_EXCLUDE_EXTRA := src/systemcmds/tests|src/examples|src/modules/gyro_fft/CMSIS_5|src/lib/drivers/smbus|src/drivers/gpio|src/modules/commander/failsafe/emscripten|failsafe_test\.dir|\.pb\.cc
+CLANG_TIDY_EXCLUDE := $(CLANG_TIDY_SUBMODULES)|$(CLANG_TIDY_EXCLUDE_EXTRA)
+
 clang-tidy: px4_sitl_default-clang
-	@cd "$(SRC_DIR)"/build/px4_sitl_default-clang && "$(SRC_DIR)"/Tools/run-clang-tidy.py -header-filter=".*\.hpp" -j$(j_clang_tidy) -p .
+	@cd "$(SRC_DIR)"/build/px4_sitl_default-clang && "$(SRC_DIR)"/Tools/run-clang-tidy.py -header-filter=".*\.hpp" -j$(j_clang_tidy) -exclude="$(CLANG_TIDY_EXCLUDE)" -p .
 
 # to automatically fix a single check at a time, eg modernize-redundant-void-arg
 #  % run-clang-tidy-4.0.py -fix -j4 -checks=-\*,modernize-redundant-void-arg -p .
 clang-tidy-fix: px4_sitl_default-clang
-	@cd "$(SRC_DIR)"/build/px4_sitl_default-clang && "$(SRC_DIR)"/Tools/run-clang-tidy.py -header-filter=".*\.hpp" -j$(j_clang_tidy) -fix -p .
+	@cd "$(SRC_DIR)"/build/px4_sitl_default-clang && "$(SRC_DIR)"/Tools/run-clang-tidy.py -header-filter=".*\.hpp" -j$(j_clang_tidy) -exclude="$(CLANG_TIDY_EXCLUDE)" -fix -p .
 
 # TODO: Fix cppcheck errors then try --enable=warning,performance,portability,style,unusedFunction or --enable=all
 cppcheck: px4_sitl_default
@@ -510,10 +550,12 @@ validate_module_configs:
 	@find "$(SRC_DIR)"/src/modules "$(SRC_DIR)"/src/drivers "$(SRC_DIR)"/src/lib -name *.yaml -type f \
 	-not -path "$(SRC_DIR)/src/lib/mixer_module/*" \
 	-not -path "$(SRC_DIR)/src/modules/uxrce_dds_client/dds_topics.yaml" \
+	-not -path "$(SRC_DIR)/src/modules/zenoh/dds_topics.yaml" \
 	-not -path "$(SRC_DIR)/src/modules/zenoh/zenoh-pico/*" \
 	-not -path "$(SRC_DIR)/src/lib/events/libevents/*" \
 	-not -path "$(SRC_DIR)/src/lib/cdrstream/*" \
-	-not -path "$(SRC_DIR)/src/lib/crypto/libtommath/*" -print0 | \
+	-not -path "$(SRC_DIR)/src/lib/crypto/libtommath/*" \
+	-not -path "$(SRC_DIR)/src/lib/tensorflow_lite_micro/*" -print0 | \
 	xargs -0 "$(SRC_DIR)"/Tools/validate_yaml.py --schema-file "$(SRC_DIR)"/validation/module_schema.yaml
 
 # Cleanup
@@ -593,3 +635,10 @@ failsafe_web:
 run_failsafe_web_server: failsafe_web
 	@cd build/px4_sitl_default_failsafe_web && \
 		python3 -m http.server
+
+# Generate reference documentation for uORB messages
+.PHONY: msg_docs
+msg_docs:
+	$(call colorecho,'Generating uORB message reference docs')
+	@mkdir -p build/msg_docs
+	@./Tools/msg/generate_msg_docs.py -d build/msg_docs

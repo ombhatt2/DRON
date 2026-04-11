@@ -41,7 +41,9 @@
 
 void Ekf::controlGpsFusion(const imuSample &imu_delayed)
 {
-	if (!_gps_buffer || (_params.ekf2_gps_ctrl == 0)) {
+	_fc.gps.available = (_params.ekf2_gps_ctrl != 0);
+
+	if (!_gps_buffer || !_fc.gps.intended()) {
 		stopGnssFusion();
 		return;
 	}
@@ -104,12 +106,17 @@ void Ekf::controlGpsFusion(const imuSample &imu_delayed)
 
 		bool do_vel_pos_reset = false;
 
-		if (!_control_status.flags.gnss_fault && (_control_status.flags.gnss_vel || _control_status.flags.gnss_pos)) {
+		if (!_control_status.flags.gnss_fault && _control_status.flags.in_air && isYawFailure()) {
+			const bool velocity_fusion_failure =  _aid_src_gnss_vel.innovation_rejected
+							      && isTimedOut(_time_last_hor_vel_fuse, _params.EKFGSF_reset_delay)
+							      && (_time_last_hor_vel_fuse > _time_last_on_ground_us);
 
-			if (_control_status.flags.in_air
-			    && isYawFailure()
-			    && isTimedOut(_time_last_hor_vel_fuse, _params.EKFGSF_reset_delay)
-			    && (_time_last_hor_vel_fuse > _time_last_on_ground_us)) {
+			const bool position_fusion_failure =  _aid_src_gnss_pos.innovation_rejected
+							      && isTimedOut(_time_last_hor_pos_fuse, _params.EKFGSF_reset_delay)
+							      && (_time_last_hor_pos_fuse > _time_last_on_ground_us);
+
+			if ((_control_status.flags.gnss_vel && velocity_fusion_failure)
+			    || (_control_status.flags.gnss_pos && position_fusion_failure)) {
 				do_vel_pos_reset = tryYawEmergencyReset();
 			}
 		}
@@ -123,7 +130,9 @@ void Ekf::controlGnssVelFusion(estimator_aid_source3d_s &aid_src, const bool for
 {
 	const bool continuing_conditions_passing = (_params.ekf2_gps_ctrl & static_cast<int32_t>(GnssCtrl::VEL))
 			&& _control_status.flags.tilt_align
-			&& _control_status.flags.yaw_align;
+			&& _control_status.flags.yaw_align
+			&& !_control_status.flags.gnss_fault
+			&& !_control_status.flags.gnss_hgt_fault;
 	const bool starting_conditions_passing = continuing_conditions_passing && _gnss_checks.passed();
 
 	if (_control_status.flags.gnss_vel) {
@@ -153,7 +162,7 @@ void Ekf::controlGnssVelFusion(estimator_aid_source3d_s &aid_src, const bool for
 			const bool do_reset = force_reset || !_control_status_prev.flags.yaw_align;
 
 			// Start fusing the data without reset if possible to avoid disturbing the filter
-			if (!do_reset && ((aid_src.test_ratio[0] + aid_src.test_ratio[1]) < sq(0.5f))) {
+			if (!do_reset && aid_src.test_ratio[0] < 1.f && aid_src.test_ratio[1] < 1.f) {
 				fused = fuseVelocity(aid_src);
 			}
 
@@ -179,7 +188,8 @@ void Ekf::controlGnssPosFusion(estimator_aid_source2d_s &aid_src, const bool for
 
 	const bool continuing_conditions_passing = gnss_pos_enabled
 			&& _control_status.flags.tilt_align
-			&& _control_status.flags.yaw_align;
+			&& _control_status.flags.yaw_align
+			&& !_control_status.flags.gnss_hgt_fault;
 	const bool starting_conditions_passing = continuing_conditions_passing && _gnss_checks.passed();
 	const bool gpos_init_conditions_passing = gnss_pos_enabled && _gnss_checks.passed();
 
@@ -213,7 +223,7 @@ void Ekf::controlGnssPosFusion(estimator_aid_source2d_s &aid_src, const bool for
 			// Start fusing the data without reset if possible to avoid disturbing the filter
 			if (_local_origin_lat_lon.isInitialized()
 			    && !do_reset
-			    && ((aid_src.test_ratio[0] + aid_src.test_ratio[1]) < sq(0.5f))) {
+			    && aid_src.test_ratio[0] < 1.f && aid_src.test_ratio[1] < 1.f) {
 				fused = fuseHorizontalPosition(aid_src);
 			}
 
@@ -296,7 +306,7 @@ bool Ekf::isGnssPosResetAllowed() const
 void Ekf::updateGnssVel(const imuSample &imu_sample, const gnssSample &gnss_sample, estimator_aid_source3d_s &aid_src)
 {
 	// correct velocity for offset relative to IMU
-	const Vector3f pos_offset_body = _params.gps_pos_body - _params.imu_pos_body;
+	const Vector3f pos_offset_body = gnss_sample.pos_body - _params.imu_pos_body;
 
 	const Vector3f angular_velocity = imu_sample.delta_ang / imu_sample.delta_ang_dt - _state.gyro_bias;
 	const Vector3f vel_offset_body = angular_velocity % pos_offset_body;
@@ -334,7 +344,7 @@ void Ekf::updateGnssVel(const imuSample &imu_sample, const gnssSample &gnss_samp
 void Ekf::updateGnssPos(const gnssSample &gnss_sample, estimator_aid_source2d_s &aid_src)
 {
 	// correct position and height for offset relative to IMU
-	const Vector3f pos_offset_body = _params.gps_pos_body - _params.imu_pos_body;
+	const Vector3f pos_offset_body = gnss_sample.pos_body - _params.imu_pos_body;
 	const Vector3f pos_offset_earth = Vector3f(_R_to_earth * pos_offset_body);
 	const LatLonAlt measurement(gnss_sample.lat, gnss_sample.lon, gnss_sample.alt);
 	const LatLonAlt measurement_corrected = measurement + (-pos_offset_earth);
@@ -518,14 +528,6 @@ bool Ekf::isYawFailure() const
 bool Ekf::resetYawToEKFGSF()
 {
 	if (!isYawEmergencyEstimateAvailable()) {
-		return false;
-	}
-
-	// don't allow reset if there's just been a yaw reset
-	const bool yaw_alignment_changed = (_control_status_prev.flags.yaw_align != _control_status.flags.yaw_align);
-	const bool quat_reset = (_state_reset_status.reset_count.quat != _state_reset_count_prev.quat);
-
-	if (yaw_alignment_changed || quat_reset) {
 		return false;
 	}
 

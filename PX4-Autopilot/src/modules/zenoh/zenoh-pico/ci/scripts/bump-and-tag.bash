@@ -2,6 +2,7 @@
 
 set -xeo pipefail
 
+readonly live_run=${LIVE_RUN:-false}
 # Release number
 readonly version=${VERSION:-input VERSION is required}
 # Git actor name
@@ -18,8 +19,13 @@ export GIT_COMMITTER_EMAIL=$git_user_email
 printf '%s' "$version" > version.txt
 
 git commit version.txt -m "chore: Bump version to $version"
-git tag --force "$version" -m "v$version"
-git log -10
-git show-ref --tags
-git push --force origin
-git push --force origin "$version"
+if [[ ${live_run} == true ]]; then
+  git tag --force "$version" -m "v$version"
+  git show-ref --tags
+  git --no-pager log -10
+  git push --force origin
+  git push --force origin "$version"
+else
+  git --no-pager log -10
+  git push --force origin
+fi

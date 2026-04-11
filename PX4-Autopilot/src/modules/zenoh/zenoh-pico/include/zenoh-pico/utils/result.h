@@ -15,6 +15,12 @@
 #ifndef ZENOH_PICO_UTILS_RESULT_H
 #define ZENOH_PICO_UTILS_RESULT_H
 
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define _ZP_UNUSED(x) (void)(x)
 #define _ZP_ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 
@@ -32,6 +38,11 @@ typedef enum {
     _Z_RES_OK = 0,
     Z_OK = 0,
     _Z_RES_CHANNEL_CLOSED = 1,
+    Z_CHANNEL_DISCONNECTED = 1,
+    _Z_RES_CHANNEL_NODATA = 2,
+    Z_CHANNEL_NODATA = 2,
+    _Z_NO_DATA_PROCESSED = 3,
+    Z_NO_DATA_PROCESSED = 3,
 
     _Z_ERR_MESSAGE_DESERIALIZATION_FAILED = -119,
     _Z_ERR_MESSAGE_SERIALIZATION_FAILED = -118,
@@ -65,6 +76,7 @@ typedef enum {
 
     _Z_ERR_SCOUT_NO_RESULTS = -87,
 
+    _Z_ERR_SYSTEM_GENERIC = -80,
     _Z_ERR_SYSTEM_TASK_FAILED = -79,
     _Z_ERR_SYSTEM_OUT_OF_MEMORY = -78,
 
@@ -74,13 +86,24 @@ typedef enum {
     _Z_ERR_INVALID = -75,
     Z_EINVAL = -75,
     _Z_ERR_OVERFLOW = -74,
+    _Z_ERR_SESSION_CLOSED = -73,
+    Z_EDESERIALIZE = -72,
+    Z_ETIMEDOUT = -71,
 
+    _Z_ERR_NULL = -127,
     _Z_ERR_GENERIC = -128
 } _z_res_t;
 
+#define _Z_SET_IF_OK(expr, value) \
+    {                             \
+        if (expr == _Z_RES_OK) {  \
+            expr = value;         \
+        }                         \
+    }
+
 #define _Z_RETURN_IF_ERR(expr)    \
     {                             \
-        int8_t __res = expr;      \
+        z_result_t __res = expr;  \
         if (__res != _Z_RES_OK) { \
             return __res;         \
         }                         \
@@ -88,14 +111,33 @@ typedef enum {
 
 #define _Z_CLEAN_RETURN_IF_ERR(base_expr, clean_expr) \
     {                                                 \
-        int8_t __res = base_expr;                     \
+        z_result_t __res = base_expr;                 \
         if (__res != _Z_RES_OK) {                     \
             clean_expr;                               \
             return __res;                             \
         }                                             \
     }
 
+#define _Z_RETURN_ERR_OOM_IF_TRUE(expr)         \
+    {                                           \
+        if (expr) {                             \
+            return _Z_ERR_SYSTEM_OUT_OF_MEMORY; \
+        }                                       \
+    }
+
+#define _Z_CLEAN_RETURN_ERR_OOM_IF_TRUE(expr, clean_expr) \
+    {                                                     \
+        if (expr) {                                       \
+            clean_expr;                                   \
+            return _Z_ERR_SYSTEM_OUT_OF_MEMORY;           \
+        }                                                 \
+    }
+
 #define _Z_IS_OK(expr) (expr == _Z_RES_OK)
 #define _Z_IS_ERR(expr) (expr != _Z_RES_OK)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZENOH_PICO_UTILS_RESULT_H */

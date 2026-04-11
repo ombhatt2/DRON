@@ -1,6 +1,11 @@
 
 #include "../inc/fc_sensor.h"
 
+uint64_t fc_sensor_get_dsp_timestamp_us(void)
+{
+	return 0;
+}
+
 int fc_sensor_get_time_offset(void)
 {
 	return 0;

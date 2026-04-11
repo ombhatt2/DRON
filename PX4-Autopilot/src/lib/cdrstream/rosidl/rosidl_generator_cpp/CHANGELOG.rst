@@ -2,6 +2,85 @@
 Changelog for package rosidl_generator_cpp
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+4.9.3 (2024-12-20)
+------------------
+
+4.9.2 (2024-11-25)
+------------------
+
+4.9.1 (2024-11-20)
+------------------
+
+4.9.0 (2024-10-03)
+------------------
+* Add types `rosidl_pycommon` (`#824 <https://github.com/ros2/rosidl/issues/824>`_)
+* Contributors: Michael Carlstrom
+
+4.8.1 (2024-06-25)
+------------------
+
+4.8.0 (2024-06-17)
+------------------
+
+4.7.0 (2024-04-26)
+------------------
+
+4.6.0 (2024-04-16)
+------------------
+
+4.5.2 (2024-03-27)
+------------------
+* Set hints to find the python version we actually want. (`#785 <https://github.com/ros2/rosidl/issues/785>`_)
+* Contributors: Chris Lalancette
+
+4.5.1 (2024-02-07)
+------------------
+
+4.5.0 (2023-12-26)
+------------------
+
+4.4.2 (2023-11-06)
+------------------
+* Fix constant generation for C++ floats (`#772 <https://github.com/ros2/rosidl/issues/772>`_)
+* Contributors: Chris Lalancette
+
+4.4.1 (2023-10-04)
+------------------
+
+4.4.0 (2023-09-07)
+------------------
+* Add rosidl_find_package_idl helper function (`#754 <https://github.com/ros2/rosidl/issues/754>`_)
+* Contributors: Mike Purvis
+
+4.3.1 (2023-08-21)
+------------------
+
+4.3.0 (2023-07-11)
+------------------
+* Fixed visibility control file added to wrong header list variable. (`#755 <https://github.com/ros2/rosidl/issues/755>`_)
+* Contributors: Stefan Fabian
+
+4.2.0 (2023-06-07)
+------------------
+* Fix deprecation warnings for message constants (`#750 <https://github.com/ros2/rosidl/issues/750>`_)
+* Generate typesupport declarations for actions, messages and services (`#703 <https://github.com/ros2/rosidl/issues/703>`_)
+* Contributors: Emerson Knapp, Stefan Fabian
+
+4.1.1 (2023-05-11)
+------------------
+* Fix IWYU for clangd in C and C++ (`#742 <https://github.com/ros2/rosidl/issues/742>`_)
+* Contributors: Alexis Paques
+
+4.1.0 (2023-04-28)
+------------------
+
+4.0.0 (2023-04-11)
+------------------
+* Type Description Codegen and Typesupport  (rep2011) (`#727 <https://github.com/ros2/rosidl/issues/727>`_)
+* Expose type hash on typesupports (rep2011) (`#729 <https://github.com/ros2/rosidl/issues/729>`_)
+* Type hash in interface codegen (rep2011) (`#722 <https://github.com/ros2/rosidl/issues/722>`_)
+* Contributors: Emerson Knapp
+
 3.4.0 (2023-02-13)
 ------------------
 * [service introspection] generate service_event messages (`#700 <https://github.com/ros2/rosidl/issues/700>`_)

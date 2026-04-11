@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
+    if (z_open(&s, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_loan_mut(s), NULL) < 0 || zp_start_lease_task(z_loan_mut(s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
 
@@ -59,15 +59,15 @@ int main(int argc, char **argv) {
 
     printf("Routers IDs:\n");
     z_owned_closure_zid_t callback;
-    z_closure(&callback, print_zid);
+    z_closure(&callback, print_zid, NULL, NULL);
     z_info_routers_zid(z_loan(s), z_move(callback));
 
     // `callback` has been `z_move`d just above, so it's safe to reuse the variable,
     // we'll just have to make sure we `z_move` it again to avoid mem-leaks.
     printf("Peers IDs:\n");
     z_owned_closure_zid_t callback2;
-    z_closure(&callback2, print_zid);
+    z_closure(&callback2, print_zid, NULL, NULL);
     z_info_peers_zid(z_loan(s), z_move(callback2));
 
-    z_close(z_move(s));
+    z_drop(z_move(s));
 }

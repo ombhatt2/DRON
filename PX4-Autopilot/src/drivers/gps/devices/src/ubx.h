@@ -328,6 +328,9 @@
 #define UBX_CFG_KEY_NAVSPG_FIXMODE              0x20110011
 #define UBX_CFG_KEY_NAVSPG_UTCSTANDARD          0x2011001c
 #define UBX_CFG_KEY_NAVSPG_DYNMODEL             0x20110021
+#define UBX_CFG_KEY_NAVSPG_INFIL_MINCNO         0x201100a3
+#define UBX_CFG_KEY_NAVSPG_INFIL_MINELEV        0x201100a4
+#define UBX_CFG_KEY_NAVSPG_CONSTR_DGNSSTO       0x201100c4
 
 #define UBX_CFG_KEY_ODO_USE_ODO                 0x10220001
 #define UBX_CFG_KEY_ODO_USE_COG                 0x10220002
@@ -335,6 +338,8 @@
 #define UBX_CFG_KEY_ODO_OUTLPCOG                0x10220004
 
 #define UBX_CFG_KEY_ITFM_ENABLE                 0x1041000d
+
+#define UBX_CFG_KEY_SEC_JAMDET_SENSITIVITY_HI   0x10f60051
 
 #define UBX_CFG_KEY_RATE_MEAS                   0x30210001
 #define UBX_CFG_KEY_RATE_NAV                    0x30210002
@@ -408,10 +413,13 @@
 #define UBX_CFG_KEY_SIGNAL_GAL_E1_ENA           0x10310007  /**< Galileo E1 */
 #define UBX_CFG_KEY_SIGNAL_GAL_E5B_ENA          0x1031000a  /**< Galileo E5b (only on u-blox F9 platform products) */
 #define UBX_CFG_KEY_SIGNAL_GAL_E5A_ENA          0x10310009  /**< Galileo E5a (only on u-blox F9-15B) */
+#define UBX_CFG_KEY_SIGNAL_GAL_E6_ENA           0x1031000b  /**< Galileo E6 (only on u-blox F9-15B and X20) */
 #define UBX_CFG_KEY_SIGNAL_BDS_ENA              0x10310022  /**< BeiDou Enable */
 #define UBX_CFG_KEY_SIGNAL_BDS_B1_ENA           0x1031000d  /**< BeiDou B1I */
+#define UBX_CFG_KEY_SIGNAL_BDS_B1C_ENA          0x1031000f  /**< BeiDou B1C (only on u-blox F9-15B) */
 #define UBX_CFG_KEY_SIGNAL_BDS_B2A_ENA          0x10310028  /**< BeiDou B2a  (only on u-blox F9-15B) */
 #define UBX_CFG_KEY_SIGNAL_BDS_B2_ENA           0x1031000e  /**< BeiDou B2I (only on u-blox F9 platform products) */
+#define UBX_CFG_KEY_SIGNAL_BDS_B3_ENA           0x10310010  /**< BeiDou B3I (only on u-blox F9-15B) */
 #define UBX_CFG_KEY_SIGNAL_QZSS_ENA             0x10310024  /**< QZSS enable */
 #define UBX_CFG_KEY_SIGNAL_QZSS_L1CA_ENA        0x10310012  /**< QZSS L1C/A */
 #define UBX_CFG_KEY_SIGNAL_QZSS_L1S_ENA         0x10310014  /**< QZSS L1S */
@@ -985,14 +993,25 @@ public:
 		RoverWithMovingBaseUART1, ///< expect RTCM input on UART1 from a moving base for heading output
 		MovingBaseUART1,          ///< RTCM output on UART1 to a rover (GPS is installed on the vehicle)
 		RoverWithStaticBaseUart2,  ///< expect RTCM input on UART2 from a static base.
+		GroundControlStation, ///< NMEA output on UART2 to a ground control station (GPS is installed in GCS)
+	};
+
+	struct Settings {
+		uint8_t dynamic_model;
+		uint8_t dgnss_timeout;
+		uint8_t min_cno;
+		int8_t min_elev;
+		uint8_t output_rate;
+		float heading_offset;
+		int32_t uart2_baudrate;
+		bool ppk_output;
+		bool jam_det_sensitivity_hi;
+		UBXMode mode;
 	};
 
 	GPSDriverUBX(Interface gpsInterface, GPSCallbackPtr callback, void *callback_user,
 		     sensor_gps_s *gps_position, satellite_info_s *satellite_info,
-		     uint8_t dynamic_model = 7,
-		     float heading_offset = 0.f,
-		     int32_t uart2_baudrate = 57600,
-		     UBXMode mode = UBXMode::Normal);
+		     Settings settings);
 
 	virtual ~GPSDriverUBX();
 
@@ -1000,7 +1019,7 @@ public:
 	int receive(unsigned timeout) override;
 	int reset(GPSRestartType restart_type) override;
 
-	bool shouldInjectRTCM() override { return _mode != UBXMode::RoverWithMovingBase; }
+	bool shouldInjectRTCM() override { return _configured && _mode != UBXMode::RoverWithMovingBase; }
 
 	enum class Board : uint8_t {
 		unknown = 0,
@@ -1012,6 +1031,8 @@ public:
 		u_blox9_F9P_L1L2 = 10, ///< F9P
 		u_blox10 = 11,
 		u_blox9_F9P_L1L5 = 12, ///< ZED-F9P-15B
+		u_blox10_L1L5 = 13, ///< DAN-F10N
+		u_blox_X20 = 14,
 	};
 
 	const Board &board() const { return _board; }
@@ -1161,6 +1182,11 @@ private:
 	uint8_t _rx_ck_a{0};
 	uint8_t _rx_ck_b{0};
 	uint8_t _dyn_model{7};  ///< ublox Dynamic platform model default 7: airborne with <2g acceleration
+	uint8_t _dgnss_timeout{0}; ///< ublox DGNSS timeout.
+	uint8_t _min_cno{0};  ///< ublox minimum satellite signal level for navigation
+
+	int8_t _min_elev{0};  ///< ublox minimum elevation for a GNSS satellite to be used in navigation
+	uint8_t _output_rate{0};  ///< ublox output rate in Hz, 0 = auto-select based on module
 
 	uint16_t _ack_waiting_msg{0};
 	uint16_t _rx_msg{};
@@ -1177,9 +1203,11 @@ private:
 
 	RTCMParsing *_rtcm_parsing{nullptr};
 
-	const UBXMode _mode;
-	const float _heading_offset;
-	const int32_t _uart2_baudrate;
+	const UBXMode _mode {};
+	const float _heading_offset {};
+	const int32_t _uart2_baudrate {};
+	const bool _ppk_output {};
+	const bool _jam_det_sensitivity_hi {};
 };
 
 

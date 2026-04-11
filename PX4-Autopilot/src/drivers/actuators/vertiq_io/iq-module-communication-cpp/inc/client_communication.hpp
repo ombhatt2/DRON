@@ -32,8 +32,12 @@ class ClientEntryAbstract {
 
     virtual void Reply(const uint8_t* data, uint8_t len) = 0;
 
+    virtual void UpdateModuleId(uint8_t new_id){
+      obj_idn_ = new_id;
+    }
+
     const uint8_t type_idn_;
-    const uint8_t obj_idn_;
+    uint8_t obj_idn_;
     const uint8_t sub_idn_;
 };
 
@@ -131,7 +135,7 @@ class ClientEntry: public ClientEntryAbstract {
 class PackedClientEntry : public ClientEntryAbstract {
   public:
     PackedClientEntry(uint8_t type_idn, uint8_t obj_idn, uint8_t sub_idn, uint8_t * data_buf):
-      ClientEntryAbstract(type_idn, obj_idn, sub_idn),    
+      ClientEntryAbstract(type_idn, obj_idn, sub_idn),
       data_buf_(data_buf)
     {};
 
@@ -164,7 +168,7 @@ class PackedClientEntry : public ClientEntryAbstract {
         memcpy(output_buf, data_buf_, output_len);
       }
     };
-    
+
     bool IsFresh() {return is_fresh_;};
 
   private:
@@ -173,24 +177,54 @@ class PackedClientEntry : public ClientEntryAbstract {
 
 };
 
-class ClientAbstract{
-  public:
-    ClientAbstract(uint8_t type_idn, uint8_t obj_idn):
-      type_idn_(type_idn),
-      obj_idn_(obj_idn) {};
-
-    virtual ~ClientAbstract(){};
-
-    virtual void ReadMsg(uint8_t* rx_data, uint8_t rx_length) = 0;
-
-    const uint8_t type_idn_;
-    const uint8_t obj_idn_;
-};
-
 int8_t ParseMsg(uint8_t* rx_data, uint8_t rx_length,
   ClientEntryAbstract** entry_array, uint8_t entry_length);
 
 int8_t ParseMsg(uint8_t* rx_data, uint8_t rx_length,
   ClientEntryAbstract& entry);
+
+class ClientAbstract{
+  public:
+    ClientAbstract(uint8_t type_idn, uint8_t obj_idn):
+      type_idn_(type_idn),
+      obj_idn_(obj_idn)
+      {};
+
+    virtual ~ClientAbstract(){};
+
+  int8_t ReadMsg(uint8_t* rx_data, uint8_t rx_length){
+    uint8_t number_of_entries = GetNumberOfClientEntries();
+    ClientEntryAbstract * client_array[number_of_entries];
+    GetClientEntryList(client_array);
+
+    int8_t parse_result = ParseMsg(rx_data, rx_length, client_array, number_of_entries);
+
+    return parse_result;
+  }
+
+    void UpdateModuleId(uint8_t new_id){
+      obj_idn_ = new_id;
+
+      UpdateEntryIds(new_id);
+    }
+
+    void UpdateEntryIds(uint8_t new_id){
+      uint8_t number_of_entries = GetNumberOfClientEntries();
+      ClientEntryAbstract * client_array[number_of_entries];
+      GetClientEntryList(client_array);
+
+      for(uint8_t entry = 0; entry < number_of_entries; entry++){
+        if(client_array[entry] != nullptr){
+          client_array[entry]->UpdateModuleId(new_id);
+        }
+      }
+    }
+
+    virtual uint16_t GetNumberOfClientEntries() = 0;
+    virtual void GetClientEntryList(ClientEntryAbstract ** client_entries) = 0;
+
+    const uint8_t type_idn_;
+    uint8_t obj_idn_;
+};
 
 #endif // CLIENT_COMMUNICATION_H

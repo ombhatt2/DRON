@@ -33,15 +33,21 @@ class StepDirectionInputClient: public ClientAbstract{
     ClientEntry<float>      angle_;
     ClientEntry<float>      angle_step_;
 
-    void ReadMsg(uint8_t* rx_data, uint8_t rx_length)
-    {
-      static const uint8_t kEntryLength = kSubAngleStep+1;
-      ClientEntryAbstract* entry_array[kEntryLength] = {
+    uint16_t GetNumberOfClientEntries(){
+      return kSubAngleStep + 1;
+    }
+
+    void GetClientEntryList(ClientEntryAbstract ** client_entries){
+      uint16_t num_entries = GetNumberOfClientEntries();
+
+      ClientEntryAbstract* entry_array[num_entries] = {
         &angle_,      // 0
         &angle_step_  // 1
       };
 
-      ParseMsg(rx_data, rx_length, entry_array, kEntryLength);
+      for(uint16_t entry = 0; entry < num_entries; entry++){
+        client_entries[entry] = entry_array[entry];
+      }
     }
 
   private:

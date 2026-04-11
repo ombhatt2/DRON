@@ -14,66 +14,159 @@
 
 #include "zenoh-pico/transport/unicast/lease.h"
 
+#include "zenoh-pico/session/interest.h"
+#include "zenoh-pico/session/liveliness.h"
+#include "zenoh-pico/session/query.h"
+#include "zenoh-pico/system/common/platform.h"
+#include "zenoh-pico/transport/common/tx.h"
+#include "zenoh-pico/transport/transport.h"
 #include "zenoh-pico/transport/unicast/transport.h"
-#include "zenoh-pico/transport/unicast/tx.h"
 #include "zenoh-pico/utils/logging.h"
 
 #if Z_FEATURE_UNICAST_TRANSPORT == 1
 
-int8_t _zp_unicast_send_keep_alive(_z_transport_unicast_t *ztu) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _zp_unicast_send_keep_alive(_z_transport_unicast_t *ztu) {
+    z_result_t ret = _Z_RES_OK;
 
     _z_transport_message_t t_msg = _z_t_msg_make_keep_alive();
-    ret = _z_unicast_send_t_msg(ztu, &t_msg);
+    ret = _z_transport_tx_send_t_msg(&ztu->_common, &t_msg, NULL);
 
     return ret;
 }
 #else
 
-int8_t _zp_unicast_send_keep_alive(_z_transport_unicast_t *ztu) {
+z_result_t _zp_unicast_send_keep_alive(_z_transport_unicast_t *ztu) {
     _ZP_UNUSED(ztu);
-    return _Z_ERR_TRANSPORT_NOT_AVAILABLE;
+    _Z_ERROR_RETURN(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
 }
 #endif  // Z_FEATURE_UNICAST_TRANSPORT == 1
 
 #if Z_FEATURE_MULTI_THREAD == 1 && Z_FEATURE_UNICAST_TRANSPORT == 1
 
+static void _zp_unicast_failed(_z_transport_unicast_t *ztu) {
+#if Z_FEATURE_LIVELINESS == 1 && Z_FEATURE_SUBSCRIPTION == 1
+    _z_liveliness_subscription_undeclare_all(_z_transport_common_get_session(&ztu->_common));
+#endif
+#if Z_FEATURE_AUTO_RECONNECT == 1
+    _z_session_rc_t zs = _z_session_weak_upgrade(&ztu->_common._session);
+#endif
+    _z_unicast_transport_close(ztu, _Z_CLOSE_EXPIRED);
+    _z_unicast_transport_clear(ztu, true);
+
+#if Z_FEATURE_AUTO_RECONNECT == 1
+    z_result_t ret = _z_reopen(&zs);
+    _z_session_rc_drop(&zs);
+    if (ret != _Z_RES_OK) {
+        _Z_ERROR("Reopen failed: %i", ret);
+    }
+#endif
+
+    _z_task_exit();
+}
+
 void *_zp_unicast_lease_task(void *ztu_arg) {
     _z_transport_unicast_t *ztu = (_z_transport_unicast_t *)ztu_arg;
+    ztu->_common._transmitted = false;
 
-    ztu->_received = false;
-    ztu->_transmitted = false;
+    int next_lease = (int)ztu->_common._lease;
+    int next_keep_alive = (int)(ztu->_common._lease / Z_TRANSPORT_LEASE_EXPIRE_FACTOR);
 
-    int next_lease = (int)ztu->_lease;
-    int next_keep_alive = (int)(ztu->_lease / Z_TRANSPORT_LEASE_EXPIRE_FACTOR);
-    while (ztu->_lease_task_running == true) {
-        // Next lease process
-        if (next_lease <= 0) {
-            // Check if received data
-            if (ztu->_received == true) {
-                // Reset the lease parameters
-                ztu->_received = false;
-            } else {
-                _Z_INFO("Closing session because it has expired after %zums", ztu->_lease);
-                ztu->_lease_task_running = false;
-                _z_unicast_transport_close(ztu, _Z_CLOSE_EXPIRED);
-                break;
-            }
-            next_lease = (int)ztu->_lease;
-        }
-        // Next keep alive process
-        if (next_keep_alive <= 0) {
-            // Check if need to send a keep alive
-            if (ztu->_transmitted == false) {
-                if (_zp_unicast_send_keep_alive(ztu) < 0) {
-                    // TODO: Handle retransmission or error
+    z_whatami_t mode = _z_transport_common_get_session(&ztu->_common)->_mode;
+    _z_transport_peer_unicast_t *curr_peer = NULL;
+    if (mode == Z_WHATAMI_CLIENT) {
+        curr_peer = _z_transport_peer_unicast_slist_value(ztu->_peers);
+        assert(curr_peer != NULL);
+    }
+    while (ztu->_common._lease_task_running) {
+        // Process client lease
+        if (mode == Z_WHATAMI_CLIENT) {
+            if (next_lease <= 0) {
+                // Check if received data
+                if (curr_peer->common._received) {
+                    // Reset the lease parameters
+                    curr_peer->common._received = false;
+                } else {
+                    // THIS LOG STRING USED IN TEST, change with caution
+                    _Z_INFO("Closing session because it has expired after %zums", ztu->_common._lease);
+                    _zp_unicast_failed(ztu);
+                    return 0;
                 }
+                next_lease = (int)ztu->_common._lease;
             }
-
-            // Reset the keep alive parameters
-            ztu->_transmitted = false;
-            next_keep_alive = (int)(ztu->_lease / Z_TRANSPORT_LEASE_EXPIRE_FACTOR);
+            // Next keep alive process
+            if (next_keep_alive <= 0) {
+                _Z_DEBUG("Sending keep alive");
+                // Check if need to send a keep alive
+                if (!ztu->_common._transmitted) {
+                    if (_zp_unicast_send_keep_alive(ztu) < 0) {
+                        // THIS LOG STRING USED IN TEST, change with caution
+                        _Z_INFO("Send keep alive failed.");
+                        _zp_unicast_failed(ztu);
+                        return 0;
+                    }
+                }
+                // Reset the keep alive parameters
+                ztu->_common._transmitted = false;
+                next_keep_alive = (int)(ztu->_common._lease / Z_TRANSPORT_LEASE_EXPIRE_FACTOR);
+            }
         }
+#if Z_FEATURE_UNICAST_PEER == 1
+        else {  // Peer lease
+            if (next_lease <= 0) {
+                _z_transport_peer_unicast_slist_t *prev = NULL;
+                _z_transport_peer_unicast_slist_t *prev_drop = NULL;
+                _z_transport_peer_mutex_lock(&ztu->_common);
+                _z_transport_peer_unicast_slist_t *curr_list = ztu->_peers;
+                while (curr_list != NULL) {
+                    bool drop_peer = false;
+                    curr_peer = _z_transport_peer_unicast_slist_value(curr_list);
+                    // Check if peer received data
+                    if (curr_peer->common._received) {
+                        curr_peer->common._received = false;
+                    } else {
+                        _Z_INFO("Deleting peer because it has expired after %zums", ztu->_common._lease);
+                        drop_peer = true;
+                        prev_drop = prev;
+                    }
+                    // Update previous only if current node is not dropped
+                    if (!drop_peer) {
+                        prev = curr_list;
+                    }
+                    // Progress list
+                    curr_list = _z_transport_peer_unicast_slist_next(curr_list);
+                    // Drop if needed
+                    if (drop_peer) {
+                        _z_session_t *zs = _z_transport_common_get_session(&ztu->_common);
+                        _z_subscription_cache_invalidate(zs);
+                        _z_queryable_cache_invalidate(zs);
+                        _z_interest_peer_disconnected(zs, &curr_peer->common);
+                        ztu->_peers = _z_transport_peer_unicast_slist_drop_element(ztu->_peers, prev_drop);
+                    }
+                }
+                _z_transport_peer_mutex_unlock(&ztu->_common);
+                next_lease = (int)ztu->_common._lease;
+            }
+            if (next_keep_alive <= 0) {
+                if (!ztu->_common._transmitted) {
+                    _Z_DEBUG("Sending keep alive");
+                    // Send keep alive to all peers
+                    _z_transport_message_t t_msg = _z_t_msg_make_keep_alive();
+                    _z_transport_peer_mutex_lock(&ztu->_common);
+                    if (!_z_transport_peer_unicast_slist_is_empty(ztu->_peers)) {
+                        if (_z_transport_tx_send_t_msg(&ztu->_common, &t_msg, ztu->_peers) != _Z_RES_OK) {
+                            _Z_INFO("Send keep alive failed.");
+                        }
+                    }
+                    _z_transport_peer_mutex_unlock(&ztu->_common);
+                }
+                ztu->_common._transmitted = false;
+                next_keep_alive = (int)(ztu->_common._lease / Z_TRANSPORT_LEASE_EXPIRE_FACTOR);
+            }
+        }
+#endif
+
+        // Query timeout process
+        _z_pending_query_process_timeout(_z_transport_common_get_session(&ztu->_common));
 
         // Compute the target interval
         int interval;
@@ -95,21 +188,21 @@ void *_zp_unicast_lease_task(void *ztu_arg) {
     return 0;
 }
 
-int8_t _zp_unicast_start_lease_task(_z_transport_t *zt, z_task_attr_t *attr, _z_task_t *task) {
+z_result_t _zp_unicast_start_lease_task(_z_transport_t *zt, z_task_attr_t *attr, _z_task_t *task) {
     // Init memory
     (void)memset(task, 0, sizeof(_z_task_t));
+    zt->_transport._unicast._common._lease_task_running = true;  // Init before z_task_init for concurrency issue
     // Init task
     if (_z_task_init(task, attr, _zp_unicast_lease_task, &zt->_transport._unicast) != _Z_RES_OK) {
-        return _Z_ERR_SYSTEM_TASK_FAILED;
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_TASK_FAILED);
     }
     // Attach task
-    zt->_transport._unicast._lease_task = task;
-    zt->_transport._unicast._lease_task_running = true;
+    zt->_transport._unicast._common._lease_task = task;
     return _Z_RES_OK;
 }
 
-int8_t _zp_unicast_stop_lease_task(_z_transport_t *zt) {
-    zt->_transport._unicast._lease_task_running = false;
+z_result_t _zp_unicast_stop_lease_task(_z_transport_t *zt) {
+    zt->_transport._unicast._common._lease_task_running = false;
     return _Z_RES_OK;
 }
 #else
@@ -119,15 +212,15 @@ void *_zp_unicast_lease_task(void *ztu_arg) {
     return NULL;
 }
 
-int8_t _zp_unicast_start_lease_task(_z_transport_t *zt, void *attr, void *task) {
+z_result_t _zp_unicast_start_lease_task(_z_transport_t *zt, void *attr, void *task) {
     _ZP_UNUSED(zt);
     _ZP_UNUSED(attr);
     _ZP_UNUSED(task);
-    return _Z_ERR_TRANSPORT_NOT_AVAILABLE;
+    _Z_ERROR_RETURN(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
 }
 
-int8_t _zp_unicast_stop_lease_task(_z_transport_t *zt) {
+z_result_t _zp_unicast_stop_lease_task(_z_transport_t *zt) {
     _ZP_UNUSED(zt);
-    return _Z_ERR_TRANSPORT_NOT_AVAILABLE;
+    _Z_ERROR_RETURN(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
 }
 #endif

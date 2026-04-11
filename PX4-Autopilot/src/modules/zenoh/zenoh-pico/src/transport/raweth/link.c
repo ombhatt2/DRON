@@ -63,31 +63,34 @@ const uint16_t _ZP_RAWETH_DEFAULT_ETHTYPE = 0x72e0;
 const char *_ZP_RAWETH_DEFAULT_INTERFACE = "lo";
 const uint8_t _ZP_RAWETH_DEFAULT_SMAC[_ZP_MAC_ADDR_LENGTH] = {0x30, 0x03, 0xc8, 0x37, 0x25, 0xa1};
 const _zp_raweth_mapping_entry_t _ZP_RAWETH_DEFAULT_MAPPING = {
-    {0, {0}, ""}, 0x0000, {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}, false};
+    ._keyexpr = {0}, ._vlan = 0x0000, ._dmac = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}, ._has_vlan = false};
 
-static _Bool _z_valid_iface_raweth(_z_str_intmap_t *config);
+static bool _z_valid_iface_raweth(_z_str_intmap_t *config);
 static const char *_z_get_iface_raweth(_z_str_intmap_t *config);
-static _Bool _z_valid_ethtype_raweth(_z_str_intmap_t *config);
+static bool _z_valid_ethtype_raweth(_z_str_intmap_t *config);
 static long _z_get_ethtype_raweth(_z_str_intmap_t *config);
 static size_t _z_valid_mapping_raweth(_z_str_intmap_t *config);
-static int8_t _z_get_mapping_raweth(_z_str_intmap_t *config, _zp_raweth_mapping_array_t *array, size_t size);
+static z_result_t _z_get_mapping_raweth(_z_str_intmap_t *config, _zp_raweth_mapping_array_t *array, size_t size);
 static size_t _z_valid_whitelist_raweth(_z_str_intmap_t *config);
-static int8_t _z_get_whitelist_raweth(_z_str_intmap_t *config, _zp_raweth_whitelist_array_t *array, size_t size);
-static int8_t _z_get_mapping_entry(char *entry, _zp_raweth_mapping_entry_t *storage);
-static _Bool _z_valid_mapping_entry(char *entry);
-static _Bool _z_valid_address_raweth(const char *address);
+static z_result_t _z_get_whitelist_raweth(_z_str_intmap_t *config, _zp_raweth_whitelist_array_t *array, size_t size);
+static z_result_t _z_get_mapping_entry(char *entry, _zp_raweth_mapping_entry_t *storage);
+static bool _z_valid_mapping_entry(char *entry);
+static bool _z_valid_address_raweth_inner(const _z_string_t *address);
+static bool _z_valid_address_raweth(const char *address);
 static uint8_t *_z_parse_address_raweth(const char *address);
-static int8_t _z_f_link_open_raweth(_z_link_t *self);
-static int8_t _z_f_link_listen_raweth(_z_link_t *self);
+static z_result_t _z_f_link_open_raweth(_z_link_t *self);
+static z_result_t _z_f_link_listen_raweth(_z_link_t *self);
 static void _z_f_link_close_raweth(_z_link_t *self);
 static void _z_f_link_free_raweth(_z_link_t *self);
-static size_t _z_f_link_write_raweth(const _z_link_t *self, const uint8_t *ptr, size_t len);
+static size_t _z_f_link_write_raweth(const _z_link_t *self, const uint8_t *ptr, size_t len,
+                                     _z_sys_net_socket_t *socket);
 static size_t _z_f_link_write_all_raweth(const _z_link_t *self, const uint8_t *ptr, size_t len);
 static size_t _z_f_link_read_raweth(const _z_link_t *self, uint8_t *ptr, size_t len, _z_slice_t *addr);
-static size_t _z_f_link_read_exact_raweth(const _z_link_t *self, uint8_t *ptr, size_t len, _z_slice_t *addr);
+static size_t _z_f_link_read_exact_raweth(const _z_link_t *self, uint8_t *ptr, size_t len, _z_slice_t *addr,
+                                          _z_sys_net_socket_t *socket);
 static uint16_t _z_get_link_mtu_raweth(void);
 
-static _Bool _z_valid_iface_raweth(_z_str_intmap_t *config) {
+static bool _z_valid_iface_raweth(_z_str_intmap_t *config) {
     const char *iface = _z_str_intmap_get(config, RAWETH_CONFIG_IFACE_KEY);
     return (iface != NULL);
 }
@@ -96,7 +99,7 @@ static const char *_z_get_iface_raweth(_z_str_intmap_t *config) {
     return _z_str_intmap_get(config, RAWETH_CONFIG_IFACE_KEY);
 }
 
-static _Bool _z_valid_ethtype_raweth(_z_str_intmap_t *config) {
+static bool _z_valid_ethtype_raweth(_z_str_intmap_t *config) {
     const char *s_ethtype = _z_str_intmap_get(config, RAWETH_CONFIG_ETHTYPE_KEY);
     if (s_ethtype == NULL) {
         return false;
@@ -116,7 +119,7 @@ static size_t _z_valid_mapping_raweth(_z_str_intmap_t *config) {
     if (cfg_str == NULL) {
         return 0;
     }
-    char *s_mapping = z_malloc(strlen(cfg_str));
+    char *s_mapping = (char *)z_malloc(strlen(cfg_str));
     if (s_mapping == NULL) {
         return 0;
     }
@@ -139,22 +142,22 @@ static size_t _z_valid_mapping_raweth(_z_str_intmap_t *config) {
     return size;
 }
 
-static int8_t _z_get_mapping_raweth(_z_str_intmap_t *config, _zp_raweth_mapping_array_t *array, size_t size) {
+static z_result_t _z_get_mapping_raweth(_z_str_intmap_t *config, _zp_raweth_mapping_array_t *array, size_t size) {
     // Retrieve data
     const char *cfg_str = _z_str_intmap_get(config, RAWETH_CONFIG_MAPPING_KEY);
     if (cfg_str == NULL) {
-        return _Z_ERR_GENERIC;
+        _Z_ERROR_RETURN(_Z_ERR_GENERIC);
     }
     // Copy data
-    char *s_mapping = z_malloc(strlen(cfg_str));
+    char *s_mapping = (char *)z_malloc(strlen(cfg_str));
     if (s_mapping == NULL) {
-        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
     strcpy(s_mapping, cfg_str);
     // Allocate array
     *array = _zp_raweth_mapping_array_make(size);
     if (_zp_raweth_mapping_array_len(array) == 0) {
-        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
     size_t idx = 0;
     // Parse list
@@ -180,7 +183,7 @@ static size_t _z_valid_whitelist_raweth(_z_str_intmap_t *config) {
         return 0;
     }
     // Copy data
-    char *s_whitelist = z_malloc(strlen(cfg_str));
+    char *s_whitelist = (char *)z_malloc(strlen(cfg_str));
     if (s_whitelist == NULL) {
         return 0;
     }
@@ -205,22 +208,22 @@ static size_t _z_valid_whitelist_raweth(_z_str_intmap_t *config) {
     return size;
 }
 
-static int8_t _z_get_whitelist_raweth(_z_str_intmap_t *config, _zp_raweth_whitelist_array_t *array, size_t size) {
+static z_result_t _z_get_whitelist_raweth(_z_str_intmap_t *config, _zp_raweth_whitelist_array_t *array, size_t size) {
     // Retrieve data
     const char *cfg_str = _z_str_intmap_get(config, RAWETH_CONFIG_WHITELIST_KEY);
     if (cfg_str == NULL) {
-        return _Z_ERR_GENERIC;
+        _Z_ERROR_RETURN(_Z_ERR_GENERIC);
     }
     // Copy data
-    char *s_whitelist = z_malloc(strlen(cfg_str));
+    char *s_whitelist = (char *)z_malloc(strlen(cfg_str));
     if (s_whitelist == NULL) {
-        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
     strcpy(s_whitelist, cfg_str);
     // Allocate array
     *array = _zp_raweth_whitelist_array_make(size);
     if (_zp_raweth_whitelist_array_len(array) == 0) {
-        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
     size_t idx = 0;
     // Parse list
@@ -230,7 +233,7 @@ static int8_t _z_get_whitelist_raweth(_z_str_intmap_t *config, _zp_raweth_whitel
         // Convert address from string to int array
         uint8_t *addr = _z_parse_address_raweth(entry);
         if (addr == NULL) {
-            return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+            _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
         }
         // Copy address to entry
         _zp_raweth_whitelist_entry_t *elem = _zp_raweth_whitelist_array_get(array, idx);
@@ -245,7 +248,7 @@ static int8_t _z_get_whitelist_raweth(_z_str_intmap_t *config, _zp_raweth_whitel
     return _Z_RES_OK;
 }
 
-static int8_t _z_get_mapping_entry(char *entry, _zp_raweth_mapping_entry_t *storage) {
+static z_result_t _z_get_mapping_entry(char *entry, _zp_raweth_mapping_entry_t *storage) {
     size_t len = strlen(entry);
     const char *entry_end = &entry[len - (size_t)1];
 
@@ -255,7 +258,7 @@ static int8_t _z_get_mapping_entry(char *entry, _zp_raweth_mapping_entry_t *stor
     size_t ke_len = (uintptr_t)p_end - (uintptr_t)p_start;
     char *ke_suffix = (char *)z_malloc(ke_len);
     if (ke_suffix == NULL) {
-        return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+        _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
     }
     memcpy(ke_suffix, p_start, ke_len);
     storage->_keyexpr = _z_rid_with_suffix(Z_RESOURCE_ID_NONE, ke_suffix);
@@ -281,7 +284,7 @@ static int8_t _z_get_mapping_entry(char *entry, _zp_raweth_mapping_entry_t *stor
     }
     return _Z_RES_OK;
 }
-static _Bool _z_valid_mapping_entry(char *entry) {
+static bool _z_valid_mapping_entry(char *entry) {
     size_t len = strlen(entry);
     const char *entry_end = &entry[len - (size_t)1];
 
@@ -310,28 +313,34 @@ static _Bool _z_valid_mapping_entry(char *entry) {
     return true;
 }
 
-static _Bool _z_valid_address_raweth(const char *address) {
+static bool _z_valid_address_raweth_inner(const _z_string_t *address) {
     // Check if the string has the correct length
-    size_t len = strlen(address);
+    size_t len = _z_string_len(address);
+    const char *str_data = _z_string_data(address);
     if (len != 17) {  // 6 pairs of hexadecimal digits and 5 colons
         return false;
     }
     // Check if the colons are at the correct positions
     for (size_t i = 2; i < len; i += 3) {
-        if (address[i] != ':') {
+        if (str_data[i] != ':') {
             return false;
         }
     }
     // Check if each character is a valid hexadecimal digit
     for (size_t i = 0; i < len; ++i) {
         if (i % 3 != 2) {
-            char c = address[i];
+            char c = str_data[i];
             if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) {
                 return false;
             }
         }
     }
     return true;
+}
+
+static bool _z_valid_address_raweth(const char *address) {
+    _z_string_t addr_str = _z_string_alias_str(address);
+    return _z_valid_address_raweth_inner(&addr_str);
 }
 
 static uint8_t *_z_parse_address_raweth(const char *address) {
@@ -351,13 +360,13 @@ static uint8_t *_z_parse_address_raweth(const char *address) {
     return ret;
 }
 
-static int8_t _z_f_link_open_raweth(_z_link_t *self) {
+static z_result_t _z_f_link_open_raweth(_z_link_t *self) {
     // Init arrays
     self->_socket._raweth._mapping = _zp_raweth_mapping_array_empty();
     self->_socket._raweth._whitelist = _zp_raweth_whitelist_array_empty();
     // Init socket smac
-    if (_z_valid_address_raweth(self->_endpoint._locator._address)) {
-        uint8_t *addr = _z_parse_address_raweth(self->_endpoint._locator._address);
+    if (_z_valid_address_raweth_inner(&self->_endpoint._locator._address)) {
+        uint8_t *addr = _z_parse_address_raweth(_z_string_data(&self->_endpoint._locator._address));
         memcpy(&self->_socket._raweth._smac, addr, _ZP_MAC_ADDR_LENGTH);
         z_free(addr);
     } else {
@@ -386,7 +395,7 @@ static int8_t _z_f_link_open_raweth(_z_link_t *self) {
         _Z_DEBUG("Invalid locator mapping, using default value.");
         self->_socket._raweth._mapping = _zp_raweth_mapping_array_make(1);
         if (_zp_raweth_mapping_array_len(&self->_socket._raweth._mapping) == 0) {
-            return _Z_ERR_SYSTEM_OUT_OF_MEMORY;
+            _Z_ERROR_RETURN(_Z_ERR_SYSTEM_OUT_OF_MEMORY);
         }
         _zp_raweth_mapping_entry_t *entry = _zp_raweth_mapping_array_get(&self->_socket._raweth._mapping, 0);
         *entry = _ZP_RAWETH_DEFAULT_MAPPING;
@@ -402,7 +411,7 @@ static int8_t _z_f_link_open_raweth(_z_link_t *self) {
     return _z_open_raweth(&self->_socket._raweth._sock, self->_socket._raweth._interface);
 }
 
-static int8_t _z_f_link_listen_raweth(_z_link_t *self) { return _z_f_link_open_raweth(self); }
+static z_result_t _z_f_link_listen_raweth(_z_link_t *self) { return _z_f_link_open_raweth(self); }
 
 static void _z_f_link_close_raweth(_z_link_t *self) {
     // Close connection
@@ -416,10 +425,12 @@ static void _z_f_link_close_raweth(_z_link_t *self) {
 
 static void _z_f_link_free_raweth(_z_link_t *self) { _ZP_UNUSED(self); }
 
-static size_t _z_f_link_write_raweth(const _z_link_t *self, const uint8_t *ptr, size_t len) {
+static size_t _z_f_link_write_raweth(const _z_link_t *self, const uint8_t *ptr, size_t len,
+                                     _z_sys_net_socket_t *socket) {
     _ZP_UNUSED(self);
     _ZP_UNUSED(ptr);
     _ZP_UNUSED(len);
+    _ZP_UNUSED(socket);
     return SIZE_MAX;
 }
 
@@ -438,29 +449,33 @@ static size_t _z_f_link_read_raweth(const _z_link_t *self, uint8_t *ptr, size_t 
     return SIZE_MAX;
 }
 
-static size_t _z_f_link_read_exact_raweth(const _z_link_t *self, uint8_t *ptr, size_t len, _z_slice_t *addr) {
+static size_t _z_f_link_read_exact_raweth(const _z_link_t *self, uint8_t *ptr, size_t len, _z_slice_t *addr,
+                                          _z_sys_net_socket_t *socket) {
     _ZP_UNUSED(self);
     _ZP_UNUSED(ptr);
     _ZP_UNUSED(len);
     _ZP_UNUSED(addr);
+    _ZP_UNUSED(socket);
     return SIZE_MAX;
 }
 
 static uint16_t _z_get_link_mtu_raweth(void) { return _ZP_MAX_ETH_FRAME_SIZE; }
 
-int8_t _z_endpoint_raweth_valid(_z_endpoint_t *endpoint) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_endpoint_raweth_valid(_z_endpoint_t *endpoint) {
+    z_result_t ret = _Z_RES_OK;
 
     // Check the root
-    if (!_z_str_eq(endpoint->_locator._protocol, RAWETH_SCHEMA)) {
+    _z_string_t str_cmp = _z_string_alias_str(RAWETH_SCHEMA);
+    if (!_z_string_equals(&endpoint->_locator._protocol, &str_cmp)) {
+        _Z_ERROR_LOG(_Z_ERR_CONFIG_LOCATOR_INVALID);
         ret = _Z_ERR_CONFIG_LOCATOR_INVALID;
     }
     return ret;
 }
 
-int8_t _z_new_link_raweth(_z_link_t *zl, _z_endpoint_t endpoint) {
-    int8_t ret = _Z_RES_OK;
-
+z_result_t _z_new_link_raweth(_z_link_t *zl, _z_endpoint_t endpoint) {
+    z_result_t ret = _Z_RES_OK;
+    zl->_type = _Z_LINK_TYPE_RAWETH;
     zl->_cap._transport = Z_LINK_CAP_TRANSPORT_RAWETH;
     zl->_cap._is_reliable = false;
     zl->_mtu = _z_get_link_mtu_raweth();
@@ -479,6 +494,7 @@ int8_t _z_new_link_raweth(_z_link_t *zl, _z_endpoint_t endpoint) {
     zl->_write_all_f = _z_f_link_write_all_raweth;
     zl->_read_f = _z_f_link_read_raweth;
     zl->_read_exact_f = _z_f_link_read_exact_raweth;
+    zl->_read_socket_f = _z_noop_link_read_socket;
 
     return ret;
 }
@@ -492,35 +508,47 @@ char *_z_raweth_config_to_str(const _z_str_intmap_t *s) {
     return _z_str_intmap_to_str(s, RAWETH_CONFIG_ARGC, args);
 }
 
-int8_t _z_raweth_config_from_str(_z_str_intmap_t *strint, const char *s) {
+z_result_t _z_raweth_config_from_strn(_z_str_intmap_t *strint, const char *s, size_t n) {
     RAWETH_CONFIG_MAPPING_BUILD
-    return _z_str_intmap_from_strn(strint, s, RAWETH_CONFIG_ARGC, args, strlen(s));
+    return _z_str_intmap_from_strn(strint, s, RAWETH_CONFIG_ARGC, args, n);
+}
+
+z_result_t _z_raweth_config_from_str(_z_str_intmap_t *strint, const char *s) {
+    return _z_raweth_config_from_strn(strint, s, strlen(s));
 }
 
 #else
-int8_t _z_endpoint_raweth_valid(_z_endpoint_t *endpoint) {
+z_result_t _z_endpoint_raweth_valid(_z_endpoint_t *endpoint) {
     _ZP_UNUSED(endpoint);
-    return _Z_ERR_TRANSPORT_NOT_AVAILABLE;
+    _Z_ERROR_RETURN(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
 }
 
-int8_t _z_new_link_raweth(_z_link_t *zl, _z_endpoint_t endpoint) {
+z_result_t _z_new_link_raweth(_z_link_t *zl, _z_endpoint_t endpoint) {
     _ZP_UNUSED(zl);
     _ZP_UNUSED(endpoint);
-    return _Z_ERR_TRANSPORT_NOT_AVAILABLE;
+    _Z_ERROR_RETURN(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
 }
 
 size_t _z_raweth_config_strlen(const _z_str_intmap_t *s) {
     _ZP_UNUSED(s);
     return 0;
 }
+
 char *_z_raweth_config_to_str(const _z_str_intmap_t *s) {
     _ZP_UNUSED(s);
     return NULL;
 }
 
-int8_t _z_raweth_config_from_str(_z_str_intmap_t *strint, const char *s) {
+z_result_t _z_raweth_config_from_strn(_z_str_intmap_t *strint, const char *s, size_t n) {
     _ZP_UNUSED(strint);
     _ZP_UNUSED(s);
-    return _Z_ERR_TRANSPORT_NOT_AVAILABLE;
+    _ZP_UNUSED(n);
+    _Z_ERROR_RETURN(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
+}
+
+z_result_t _z_raweth_config_from_str(_z_str_intmap_t *strint, const char *s) {
+    _ZP_UNUSED(strint);
+    _ZP_UNUSED(s);
+    _Z_ERROR_RETURN(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
 }
 #endif

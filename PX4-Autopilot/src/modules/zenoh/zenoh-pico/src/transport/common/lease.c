@@ -19,8 +19,8 @@
 #include "zenoh-pico/transport/multicast/lease.h"
 #include "zenoh-pico/transport/unicast/lease.h"
 
-int8_t _z_send_keep_alive(_z_transport_t *zt) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_send_keep_alive(_z_transport_t *zt) {
+    z_result_t ret = _Z_RES_OK;
     switch (zt->_type) {
         case _Z_TRANSPORT_UNICAST_TYPE:
             ret = _zp_unicast_send_keep_alive(&zt->_transport._unicast);
@@ -32,14 +32,15 @@ int8_t _z_send_keep_alive(_z_transport_t *zt) {
             ret = _zp_multicast_send_keep_alive(&zt->_transport._raweth);
             break;
         default:
+            _Z_ERROR_LOG(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
             ret = _Z_ERR_TRANSPORT_NOT_AVAILABLE;
             break;
     }
     return ret;
 }
 
-int8_t _z_send_join(_z_transport_t *zt) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_send_join(_z_transport_t *zt) {
+    z_result_t ret = _Z_RES_OK;
     // Join task only applies to multicast transports
     switch (zt->_type) {
         case _Z_TRANSPORT_MULTICAST_TYPE:
@@ -50,6 +51,7 @@ int8_t _z_send_join(_z_transport_t *zt) {
             break;
         default:
             _ZP_UNUSED(zt);
+            _Z_ERROR_LOG(_Z_ERR_TRANSPORT_NOT_AVAILABLE);
             ret = _Z_ERR_TRANSPORT_NOT_AVAILABLE;
             break;
     }

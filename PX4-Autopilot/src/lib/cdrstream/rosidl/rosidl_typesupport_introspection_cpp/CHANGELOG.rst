@@ -2,6 +2,88 @@
 Changelog for package rosidl_typesupport_introspection_cpp
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+4.9.3 (2024-12-20)
+------------------
+
+4.9.2 (2024-11-25)
+------------------
+
+4.9.1 (2024-11-20)
+------------------
+
+4.9.0 (2024-10-03)
+------------------
+* Add types `rosidl_pycommon` (`#824 <https://github.com/ros2/rosidl/issues/824>`_)
+* Contributors: Michael Carlstrom
+
+4.8.1 (2024-06-25)
+------------------
+
+4.8.0 (2024-06-17)
+------------------
+
+4.7.0 (2024-04-26)
+------------------
+* Global use of nodiscard (`#801 <https://github.com/ros2/rosidl/issues/801>`_)
+  * Global use of nodiscard
+* Contributors: Lucas Wendland
+
+4.6.0 (2024-04-16)
+------------------
+* Adding interfaces to support `@key` annotation (`#796 <https://github.com/ros2/rosidl/issues/796>`_)
+  Co-authored-by: Mario Dominguez <mariodominguez@eprosima.com>
+* Contributors: Miguel Company
+
+4.5.2 (2024-03-27)
+------------------
+* Set hints to find the python version we actually want. (`#785 <https://github.com/ros2/rosidl/issues/785>`_)
+* Contributors: Chris Lalancette
+
+4.5.1 (2024-02-07)
+------------------
+
+4.5.0 (2023-12-26)
+------------------
+* Switch to target_link_libraries. (`#776 <https://github.com/ros2/rosidl/issues/776>`_)
+* Contributors: Chris Lalancette
+
+4.4.2 (2023-11-06)
+------------------
+
+4.4.1 (2023-10-04)
+------------------
+
+4.4.0 (2023-09-07)
+------------------
+* Add rosidl_find_package_idl helper function (`#754 <https://github.com/ros2/rosidl/issues/754>`_)
+* Contributors: Mike Purvis
+
+4.3.1 (2023-08-21)
+------------------
+* update comment (`#757 <https://github.com/ros2/rosidl/issues/757>`_)
+* Contributors: Chen Lihui
+
+4.3.0 (2023-07-11)
+------------------
+
+4.2.0 (2023-06-07)
+------------------
+* Fix deprecation warnings for message constants (`#750 <https://github.com/ros2/rosidl/issues/750>`_)
+* Contributors: Emerson Knapp
+
+4.1.1 (2023-05-11)
+------------------
+
+4.1.0 (2023-04-28)
+------------------
+
+4.0.0 (2023-04-11)
+------------------
+* Type Description Codegen and Typesupport  (rep2011) (`#727 <https://github.com/ros2/rosidl/issues/727>`_)
+* Expose type hash on typesupports (rep2011) (`#729 <https://github.com/ros2/rosidl/issues/729>`_)
+* Type hash in interface codegen (rep2011) (`#722 <https://github.com/ros2/rosidl/issues/722>`_)
+* Contributors: Emerson Knapp
+
 3.4.0 (2023-02-13)
 ------------------
 * Make sure to add the event message to typesupport introspection cpp. (`#724 <https://github.com/ros2/rosidl/issues/724>`_)

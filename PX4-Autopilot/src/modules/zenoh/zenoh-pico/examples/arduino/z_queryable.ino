@@ -21,33 +21,32 @@
 #define SSID "SSID"
 #define PASS "PASS"
 
-#define CLIENT_OR_PEER 0  // 0: Client mode; 1: Peer mode
-#if CLIENT_OR_PEER == 0
+// Client mode values (comment/uncomment as needed)
 #define MODE "client"
-#define CONNECT ""  // If empty, it will scout
-#elif CLIENT_OR_PEER == 1
-#define MODE "peer"
-#define CONNECT "udp/224.0.0.225:7447#iface=en0"
-#else
-#error "Unknown Zenoh operation mode. Check CLIENT_OR_PEER value."
-#endif
+#define LOCATOR ""  // If empty, it will scout
+// Peer mode values (comment/uncomment as needed)
+// #define MODE "peer"
+// #define LOCATOR "udp/224.0.0.225:7447#iface=en0"
 
 #define KEYEXPR "demo/example/zenoh-pico-queryable"
 #define VALUE "[ARDUINO]{ESP32} Queryable from Zenoh-Pico!"
 
-void query_handler(const z_loaned_query_t *query, void *arg) {
+z_owned_session_t s;
+z_owned_queryable_t qable;
+
+void query_handler(z_loaned_query_t *query, void *arg) {
     z_view_string_t keystr;
     z_keyexpr_as_view_string(z_query_keyexpr(query), &keystr);
     Serial.print(" >> [Queryable handler] Received Query '");
-    Serial.print(z_string_data(z_view_string_loan(&keystr)));
+    Serial.write(z_string_data(z_view_string_loan(&keystr)), z_string_len(z_view_string_loan(&keystr)));
     Serial.println("'");
 
     // Process value
     z_owned_string_t payload_string;
-    z_bytes_deserialize_into_string(z_query_payload(query), &payload_string);
+    z_bytes_to_string(z_query_payload(query), &payload_string);
     if (z_string_len(z_string_loan(&payload_string)) > 1) {
         Serial.print("     with value '");
-        Serial.print(z_string_data(z_string_loan(&payload_string)));
+        Serial.write(z_string_data(z_string_loan(&payload_string)), z_string_len(z_string_loan(&payload_string)));
         Serial.println("'");
     }
     z_string_drop(z_string_move(&payload_string));
@@ -57,7 +56,7 @@ void query_handler(const z_loaned_query_t *query, void *arg) {
 
     // Reply value encoding
     z_owned_bytes_t reply_payload;
-    z_bytes_serialize_from_str(&reply_payload, VALUE);
+    z_bytes_from_static_str(&reply_payload, VALUE);
 
     z_query_reply(query, z_view_keyexpr_loan(&ke), z_bytes_move(&reply_payload), NULL);
 }
@@ -82,14 +81,17 @@ void setup() {
     z_owned_config_t config;
     z_config_default(&config);
     zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_MODE_KEY, MODE);
-    if (strcmp(CONNECT, "") != 0) {
-        zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_CONNECT_KEY, CONNECT);
+    if (strcmp(LOCATOR, "") != 0) {
+        if (strcmp(MODE, "client") == 0) {
+            zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_CONNECT_KEY, LOCATOR);
+        } else {
+            zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_LISTEN_KEY, LOCATOR);
+        }
     }
 
     // Open Zenoh session
     Serial.print("Opening Zenoh Session...");
-    z_owned_session_t s;
-    if (z_open(&s, z_config_move(&config)) < 0) {
+    if (z_open(&s, z_config_move(&config), NULL) < 0) {
         Serial.println("Unable to open session!");
         while (1) {
             ;
@@ -97,9 +99,14 @@ void setup() {
     }
     Serial.println("OK");
 
-    // Start the receive and the session lease loop for zenoh-pico
-    zp_start_read_task(z_session_loan_mut(&s), NULL);
-    zp_start_lease_task(z_session_loan_mut(&s), NULL);
+    // Start read and lease tasks for zenoh-pico
+    if (zp_start_read_task(z_session_loan_mut(&s), NULL) < 0 || zp_start_lease_task(z_session_loan_mut(&s), NULL) < 0) {
+        Serial.println("Unable to start read and lease tasks\n");
+        z_session_drop(z_session_move(&s));
+        while (1) {
+            ;
+        }
+    }
 
     // Declare Zenoh queryable
     Serial.print("Declaring Queryable on ");
@@ -107,10 +114,9 @@ void setup() {
     Serial.println(" ...");
     z_owned_closure_query_t callback;
     z_closure_query(&callback, query_handler, NULL, NULL);
-    z_owned_queryable_t qable;
     z_view_keyexpr_t ke;
     z_view_keyexpr_from_str_unchecked(&ke, KEYEXPR);
-    if (z_declare_queryable(&qable, z_session_loan(&s), z_view_keyexpr_loan(&ke), z_closure_query_move(&callback),
+    if (z_declare_queryable(z_session_loan(&s), &qable, z_view_keyexpr_loan(&ke), z_closure_query_move(&callback),
                             NULL) < 0) {
         Serial.println("Unable to declare queryable.");
         while (1) {

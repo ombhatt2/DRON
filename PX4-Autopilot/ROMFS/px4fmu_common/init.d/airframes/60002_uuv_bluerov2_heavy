@@ -22,6 +22,9 @@
 
 . ${R}etc/init.d/rc.uuv_defaults
 
+# Overwrite DDS AG IP to `192.168.0.1`
+param set-default UXRCE_DDS_AG_IP -1062731775
+
 # param set-default MAV_1_CONFIG 102
 
 param set-default BAT1_A_PER_V 37.8798
@@ -45,7 +48,6 @@ param set-default COM_LOW_BAT_ACT 0
 param set-default NAV_DLL_ACT 0
 param set-default GF_ACTION 1
 param set-default NAV_RCL_ACT 1
-param set-default COM_POSCTL_NAVL 2
 
 # disable attitude failure detection
 param set-default FD_FAIL_P 0

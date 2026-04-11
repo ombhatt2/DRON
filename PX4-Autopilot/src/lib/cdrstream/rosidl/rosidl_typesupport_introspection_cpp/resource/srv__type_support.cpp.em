@@ -21,10 +21,14 @@ TEMPLATE(
 }@
 
 @{
-from rosidl_pycommon import convert_camel_case_to_lower_case_underscore
+from rosidl_generator_c import idl_structure_type_to_c_typename
+from rosidl_generator_type_description import GET_DESCRIPTION_FUNC
+from rosidl_generator_type_description import GET_HASH_FUNC
+from rosidl_generator_type_description import GET_SOURCES_FUNC
+from rosidl_parser.definition import SERVICE_EVENT_MESSAGE_SUFFIX
 from rosidl_parser.definition import SERVICE_REQUEST_MESSAGE_SUFFIX
 from rosidl_parser.definition import SERVICE_RESPONSE_MESSAGE_SUFFIX
-from rosidl_parser.definition import SERVICE_EVENT_MESSAGE_SUFFIX
+from rosidl_pycommon import convert_camel_case_to_lower_case_underscore
 include_parts = [package_name] + list(interface_path.parents[0].parts) + [
     'detail', convert_camel_case_to_lower_case_underscore(interface_path.stem)]
 include_base = '/'.join(include_parts)
@@ -34,6 +38,7 @@ header_files = [
     'rosidl_typesupport_cpp/service_type_support.hpp',
     'rosidl_typesupport_interface/macros.h',
     'rosidl_typesupport_introspection_cpp/visibility_control.h',
+    include_base + '__functions.h',
     include_base + '__struct.hpp',
     'rosidl_typesupport_introspection_cpp/identifier.hpp',
     'rosidl_typesupport_introspection_cpp/message_type_support_decl.hpp',
@@ -63,7 +68,7 @@ namespace rosidl_typesupport_introspection_cpp
 static ::rosidl_typesupport_introspection_cpp::ServiceMembers @(service.namespaced_type.name)_service_members = {
   "@('::'.join([package_name] + list(interface_path.parents[0].parts)))",  // service namespace
   "@(service.namespaced_type.name)",  // service name
-  // these two fields are initialized below on the first access
+  // the following fields are initialized below on first access
   // see get_service_type_support_handle<@('::'.join([package_name] + list(interface_path.parents[0].parts) + [service.namespaced_type.name]))>()
   nullptr,  // request message
   nullptr,  // response message
@@ -74,9 +79,14 @@ static const rosidl_service_type_support_t @(service.namespaced_type.name)_servi
   ::rosidl_typesupport_introspection_cpp::typesupport_identifier,
   &@(service.namespaced_type.name)_service_members,
   get_service_typesupport_handle_function,
+  ::rosidl_typesupport_introspection_cpp::get_message_type_support_handle<@('::'.join([package_name, *interface_path.parents[0].parts, service.namespaced_type.name]))@(SERVICE_REQUEST_MESSAGE_SUFFIX)>(),
+  ::rosidl_typesupport_introspection_cpp::get_message_type_support_handle<@('::'.join([package_name, *interface_path.parents[0].parts, service.namespaced_type.name]))@(SERVICE_RESPONSE_MESSAGE_SUFFIX)>(),
+  ::rosidl_typesupport_introspection_cpp::get_message_type_support_handle<@('::'.join([package_name, *interface_path.parents[0].parts, service.namespaced_type.name]))@(SERVICE_EVENT_MESSAGE_SUFFIX)>(),
   &::rosidl_typesupport_cpp::service_create_event_message<@('::'.join([package_name, *interface_path.parents[0].parts, service.namespaced_type.name]))>,
   &::rosidl_typesupport_cpp::service_destroy_event_message<@('::'.join([package_name, *interface_path.parents[0].parts, service.namespaced_type.name]))>,
-  ::rosidl_typesupport_introspection_cpp::get_message_type_support_handle<@('::'.join([package_name, *interface_path.parents[0].parts, service.namespaced_type.name]))_Event>(),
+  &@(idl_structure_type_to_c_typename(service.namespaced_type))__@(GET_HASH_FUNC),
+  &@(idl_structure_type_to_c_typename(service.namespaced_type))__@(GET_DESCRIPTION_FUNC),
+  &@(idl_structure_type_to_c_typename(service.namespaced_type))__@(GET_SOURCES_FUNC),
 };
 
 }  // namespace rosidl_typesupport_introspection_cpp
@@ -101,7 +111,7 @@ get_service_type_support_handle<@('::'.join([package_name] + list(interface_path
   auto service_members = const_cast<::rosidl_typesupport_introspection_cpp::ServiceMembers *>(
     static_cast<const ::rosidl_typesupport_introspection_cpp::ServiceMembers *>(
       service_type_support->data));
-  // make sure that both the request_members_ and the response_members_ are initialized
+  // make sure all of the service_members are initialized
   // if they are not, initialize them
   if (
     service_members->request_members_ == nullptr ||
@@ -124,7 +134,6 @@ get_service_type_support_handle<@('::'.join([package_name] + list(interface_path
         ::@('::'.join([package_name] + list(interface_path.parents[0].parts)))::@(service.response_message.structure.namespaced_type.name)
       >()->data
       );
-
     // initialize the event_members_ with the static function from the external library
     service_members->event_members_ = static_cast<
       const ::rosidl_typesupport_introspection_cpp::MessageMembers *

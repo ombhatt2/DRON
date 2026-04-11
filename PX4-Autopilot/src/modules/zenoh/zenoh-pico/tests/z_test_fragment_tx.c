@@ -59,14 +59,14 @@ int main(int argc, char **argv) {
     }
     // Open session
     z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
+    if (z_open(&s, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_loan_mut(s), NULL) < 0 || zp_start_lease_task(z_loan_mut(s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
     // Wait for joins
@@ -76,20 +76,26 @@ int main(int argc, char **argv) {
     // Put data
     z_view_keyexpr_t ke;
     z_view_keyexpr_from_str(&ke, keyexpr);
+
+    z_put_options_t options;
+    z_put_options_default(&options);
+    options.priority = Z_PRIORITY_DATA_HIGH;
+    options.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
+
     for (int i = 0; i < 5; i++) {
         // Create payload
         z_owned_bytes_t payload;
-        z_bytes_serialize_from_slice(&payload, value, size);
+        z_bytes_from_buf(&payload, value, size, NULL, NULL);
 
         printf("[tx]: Sending packet on %s, len: %d\n", keyexpr, (int)size);
-        if (z_put(z_loan(s), z_loan(ke), z_move(payload), NULL) < 0) {
+        if (z_put(z_loan(s), z_loan(ke), z_move(payload), &options) < 0) {
             printf("Oh no! Put has failed...\n");
             return -1;
         }
         z_sleep_s(1);
     }
     // Clean up
-    z_close(z_move(s));
+    z_drop(z_move(s));
     free(value);
     return 0;
 }

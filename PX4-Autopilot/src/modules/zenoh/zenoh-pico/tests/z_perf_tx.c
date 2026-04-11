@@ -28,7 +28,7 @@ int send_packets(unsigned long pkt_len, z_owned_publisher_t *pub, uint8_t *value
     while (elapsed_us < TEST_DURATION_US) {
         // Create payload
         z_owned_bytes_t payload;
-        z_bytes_serialize_from_slice(&payload, value, pkt_len);
+        z_bytes_from_buf(&payload, value, pkt_len, NULL, NULL);
 
         z_publisher_put(z_loan(*pub), z_move(payload), NULL);
         elapsed_us = z_clock_elapsed_us(&test_start);
@@ -69,21 +69,21 @@ int main(int argc, char **argv) {
     }
     // Open session
     z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
+    if (z_open(&s, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         exit(-1);
     }
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_loan_mut(s), NULL) < 0 || zp_start_lease_task(z_loan_mut(s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         exit(-1);
     }
     // Declare publisher
     z_owned_publisher_t pub;
     z_view_keyexpr_t ke;
     z_view_keyexpr_from_str(&ke, keyexpr);
-    if (z_declare_publisher(&pub, z_loan(s), z_loan(ke), NULL) < 0) {
+    if (z_declare_publisher(z_loan(s), &pub, z_loan(ke), NULL) < 0) {
         printf("Unable to declare publisher for key expression!\n");
         exit(-1);
     }
@@ -103,12 +103,17 @@ int main(int argc, char **argv) {
     printf("Sending end pkt\n");
     // Create payload
     z_owned_bytes_t payload;
-    z_bytes_serialize_from_slice(&payload, value, 1);
+    z_bytes_from_buf(&payload, value, 1, NULL, NULL);
 
     z_publisher_put(z_loan(pub), z_move(payload), NULL);
+
+    // Stop read and lease tasks for zenoh-pico
+    zp_stop_read_task(z_loan_mut(s));
+    zp_stop_lease_task(z_loan_mut(s));
+
     // Clean up
-    z_undeclare_publisher(z_move(pub));
-    z_close(z_move(s));
+    z_drop(z_move(pub));
+    z_drop(z_move(s));
     free(value);
     exit(0);
 }

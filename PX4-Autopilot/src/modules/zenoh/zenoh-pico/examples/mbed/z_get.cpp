@@ -20,10 +20,10 @@
 #define CLIENT_OR_PEER 0  // 0: Client mode; 1: Peer mode
 #if CLIENT_OR_PEER == 0
 #define MODE "client"
-#define CONNECT ""  // If empty, it will scout
+#define LOCATOR ""  // If empty, it will scout
 #elif CLIENT_OR_PEER == 1
 #define MODE "peer"
-#define CONNECT "udp/224.0.0.225:7447#iface=en0"
+#define LOCATOR "udp/224.0.0.225:7447#iface=en0"
 #else
 #error "Unknown Zenoh operation mode. Check CLIENT_OR_PEER value."
 #endif
@@ -33,15 +33,16 @@
 
 void reply_dropper(void *ctx) { printf(" >> Received query final notification\n"); }
 
-void reply_handler(const z_loaned_reply_t *oreply, void *ctx) {
+void reply_handler(z_loaned_reply_t *oreply, void *ctx) {
     if (z_reply_is_ok(oreply)) {
         const z_loaned_sample_t *sample = z_reply_ok(oreply);
         z_view_string_t keystr;
         z_keyexpr_as_view_string(z_sample_keyexpr(sample), &keystr);
         z_owned_string_t replystr;
-        z_bytes_deserialize_into_string(z_sample_payload(sample), &replystr);
+        z_bytes_to_string(z_sample_payload(sample), &replystr);
 
-        printf(" >> Received ('%s': '%s')\n", z_string_data(z_view_string_loan(&keystr)),
+        printf(" >> Received ('%.*s': '%.*s')\n", (int)z_string_len(z_view_string_loan(&keystr)),
+               z_string_data(z_view_string_loan(&keystr)), (int)z_string_len(z_string_loan(&replystr)),
                z_string_data(z_string_loan(&replystr)));
         z_string_drop(z_string_move(&replystr));
     } else {
@@ -60,14 +61,17 @@ int main(int argc, char **argv) {
     z_owned_config_t config;
     z_config_default(&config);
     zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_MODE_KEY, MODE);
-    if (strcmp(CONNECT, "") != 0) {
-        zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_CONNECT_KEY, CONNECT);
+    if (strcmp(LOCATOR, "") != 0) {
+        if (strcmp(MODE, "client") == 0) {
+            zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_CONNECT_KEY, LOCATOR);
+        } else {
+            zp_config_insert(z_config_loan_mut(&config), Z_CONFIG_LISTEN_KEY, LOCATOR);
+        }
     }
-
     // Open Zenoh session
     printf("Opening Zenoh Session...");
     z_owned_session_t s;
-    if (z_open(&s, z_config_move(&config)) < 0) {
+    if (z_open(&s, z_config_move(&config), NULL) < 0) {
         printf("Unable to open session!\n");
         exit(-1);
     }
@@ -85,8 +89,8 @@ int main(int argc, char **argv) {
         // Value encoding
         z_owned_bytes_t payload;
         if (strcmp(VALUE, "") != 0) {
-            z_bytes_serialize_from_str(&payload, VALUE);
-            opts.payload = &payload;
+            z_bytes_from_static_str(&payload, VALUE);
+            opts.payload = z_bytes_move(&payload);
         }
         z_owned_closure_reply_t callback;
         z_closure_reply(&callback, reply_handler, reply_dropper, NULL);
@@ -100,7 +104,7 @@ int main(int argc, char **argv) {
 
     printf("Closing Zenoh Session...");
 
-    z_close(z_session_move(&s));
+    z_session_drop(z_session_move(&s));
     printf("OK!\n");
 
     return 0;

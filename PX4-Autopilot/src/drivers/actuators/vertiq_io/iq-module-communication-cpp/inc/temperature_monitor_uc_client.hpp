@@ -41,10 +41,14 @@ class TemperatureMonitorUcClient: public ClientAbstract{
     ClientEntry<float>    otlo_;
     ClientEntry<float>    derate_;
 
-    void ReadMsg(uint8_t* rx_data, uint8_t rx_length)
-    {
-      static const uint8_t kEntryLength = kSubDerate+1;
-      ClientEntryAbstract* entry_array[kEntryLength] = {
+    uint16_t GetNumberOfClientEntries(){
+      return kSubDerate + 1;
+    }
+
+    void GetClientEntryList(ClientEntryAbstract ** client_entries){
+      uint16_t num_entries = GetNumberOfClientEntries();
+
+      ClientEntryAbstract* entry_array[num_entries] = {
         &uc_temp_,    // 0
         &filter_fs_,  // 1
         &filter_fc_,  // 2
@@ -53,7 +57,9 @@ class TemperatureMonitorUcClient: public ClientAbstract{
         &derate_      // 5
       };
 
-      ParseMsg(rx_data, rx_length, entry_array, kEntryLength);
+      for(uint16_t entry = 0; entry < num_entries; entry++){
+        client_entries[entry] = entry_array[entry];
+      }
     }
 
   private:

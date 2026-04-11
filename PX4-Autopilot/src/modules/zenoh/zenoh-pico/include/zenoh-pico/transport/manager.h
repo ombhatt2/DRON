@@ -19,7 +19,23 @@
 #include "zenoh-pico/link/manager.h"
 #include "zenoh-pico/transport/transport.h"
 
-int8_t _z_new_transport(_z_transport_t *zt, _z_id_t *bs, char *locator, z_whatami_t mode);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+enum _z_peer_op_e {
+    _Z_PEER_OP_OPEN = 0,
+    _Z_PEER_OP_LISTEN = 1,
+};
+
+z_result_t _z_new_transport(_z_transport_t *zt, const _z_id_t *bs, const _z_string_t *locator, z_whatami_t mode,
+                            int peer_op, const _z_config_t *session_cfg);
+z_result_t _z_new_peer(_z_transport_t *zt, const _z_id_t *session_id, const _z_string_t *locator,
+                       const _z_config_t *session_cfg);
 void _z_free_transport(_z_transport_t **zt);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INCLUDE_ZENOH_PICO_TRANSPORT_MANAGER_H */

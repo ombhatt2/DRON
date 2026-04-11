@@ -18,7 +18,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/types.h>
 
 #include "zenoh-pico/protocol/codec.h"
 #include "zenoh-pico/protocol/codec/core.h"
@@ -39,7 +38,7 @@
 
 #define _Z_INTEREST_TRACE_ID 0x13
 
-int8_t _z_interest_encode(_z_wbuf_t *wbf, const _z_interest_t *interest, _Bool is_final) {
+z_result_t _z_interest_encode(_z_wbuf_t *wbf, const _z_interest_t *interest, bool is_final) {
     // Set id
     _Z_RETURN_IF_ERR(_z_zsize_encode(wbf, interest->_id));
     if (is_final) {
@@ -52,7 +51,7 @@ int8_t _z_interest_encode(_z_wbuf_t *wbf, const _z_interest_t *interest, _Bool i
     // Process restricted flag
     if (_Z_HAS_FLAG(flags, _Z_INTEREST_FLAG_RESTRICTED)) {
         // Set Named & Mapping flags
-        _Bool has_kesuffix = _z_keyexpr_has_suffix(interest->_keyexpr);
+        bool has_kesuffix = _z_keyexpr_has_suffix(&interest->_keyexpr);
         if (has_kesuffix) {
             _Z_SET_FLAG(flags, _Z_INTEREST_CODEC_FLAG_N);
         }
@@ -69,7 +68,7 @@ int8_t _z_interest_encode(_z_wbuf_t *wbf, const _z_interest_t *interest, _Bool i
     return _Z_RES_OK;
 }
 
-int8_t _z_interest_decode(_z_interest_t *interest, _z_zbuf_t *zbf, _Bool is_final, _Bool has_ext) {
+z_result_t _z_interest_decode(_z_interest_t *interest, _z_zbuf_t *zbf, bool is_final, bool has_ext, uintptr_t mapping) {
     // Decode id
     _Z_RETURN_IF_ERR(_z_zint32_decode(&interest->_id, zbf));
     if (!is_final) {
@@ -79,14 +78,11 @@ int8_t _z_interest_decode(_z_interest_t *interest, _z_zbuf_t *zbf, _Bool is_fina
         // Process restricted flag
         if (_Z_HAS_FLAG(flags, _Z_INTEREST_FLAG_RESTRICTED)) {
             // Decode ke
-            _Z_RETURN_IF_ERR(_z_keyexpr_decode(&interest->_keyexpr, zbf, _Z_HAS_FLAG(flags, _Z_INTEREST_CODEC_FLAG_N)));
-            // Set mapping
-            if (_Z_HAS_FLAG(flags, _Z_INTEREST_CODEC_FLAG_M)) {
-                _z_keyexpr_set_mapping(&interest->_keyexpr, _Z_KEYEXPR_MAPPING_UNKNOWN_REMOTE);
-            }
+            _Z_RETURN_IF_ERR(_z_keyexpr_decode(&interest->_keyexpr, zbf, _Z_HAS_FLAG(flags, _Z_INTEREST_CODEC_FLAG_N),
+                                               _Z_HAS_FLAG(flags, _Z_INTEREST_CODEC_FLAG_M), mapping));
         }
         // Store interest flags (current and future already processed)
-        interest->flags |= (flags & _Z_INTEREST_FLAG_COPY_MASK);
+        interest->flags = (uint8_t)(interest->flags | (flags & _Z_INTEREST_FLAG_COPY_MASK));
     }
     if (has_ext) {
         _Z_RETURN_IF_ERR(_z_msg_ext_skip_non_mandatories(zbf, _Z_INTEREST_TRACE_ID));

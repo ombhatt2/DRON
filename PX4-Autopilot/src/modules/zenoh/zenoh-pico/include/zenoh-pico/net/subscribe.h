@@ -20,27 +20,29 @@
 #include "zenoh-pico/net/session.h"
 #include "zenoh-pico/protocol/core.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Return type when declaring a subscriber.
  */
 typedef struct {
     uint32_t _entity_id;
-    _z_session_rc_t _zn;
+    _z_session_weak_t _zn;
 } _z_subscriber_t;
 
 #if Z_FEATURE_SUBSCRIPTION == 1
-/**
- * Create a default subscription info for a push subscriber.
- *
- * Returns:
- *     A :c:type:`_z_subinfo_t` containing the created subscription info.
- */
-_z_subinfo_t _z_subinfo_default(void);
-
+// Warning: None of the sub-types require a non-0 initialization. Add a init function if it changes.
+static inline _z_subscriber_t _z_subscriber_null(void) { return (_z_subscriber_t){0}; }
+static inline bool _z_subscriber_check(const _z_subscriber_t *subscriber) { return !_Z_RC_IS_NULL(&subscriber->_zn); }
 void _z_subscriber_clear(_z_subscriber_t *sub);
 void _z_subscriber_free(_z_subscriber_t **sub);
-_Bool _z_subscriber_check(const _z_subscriber_t *subscriber);
-_z_subscriber_t _z_subscriber_null(void);
+
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* ZENOH_PICO_SUBSCRIBE_NETAPI_H */

@@ -22,6 +22,7 @@ typedef struct {
 	fc_remove_subscription_cb   remove_sub_callback;
 } fc_callbacks;
 
+uint64_t fc_sensor_get_dsp_timestamp_us(void);
 int fc_sensor_get_time_offset(void);
 int fc_sensor_set_library_name(const char *name);
 int fc_sensor_initialize(bool enable_debug_messages, fc_callbacks *callbacks);

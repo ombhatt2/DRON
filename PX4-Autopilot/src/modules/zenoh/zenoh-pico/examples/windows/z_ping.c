@@ -30,7 +30,7 @@
 static z_owned_condvar_t cond;
 static z_owned_mutex_t mutex;
 
-void callback(const z_loaned_sample_t* sample, void* context) {
+void callback(z_loaned_sample_t* sample, void* context) {
     (void)sample;
     (void)context;
     z_condvar_signal(z_loan_mut(cond));
@@ -66,21 +66,21 @@ int main(int argc, char** argv) {
     z_owned_config_t config;
     z_config_default(&config);
     z_owned_session_t session;
-    if (z_open(&session, z_move(config)) < 0) {
+    if (z_open(&session, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
 
     if (zp_start_read_task(z_loan_mut(session), NULL) < 0 || zp_start_lease_task(z_loan_mut(session), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&session));
+        z_drop(z_move(session));
         return -1;
     }
 
     z_view_keyexpr_t ping;
     z_view_keyexpr_from_str_unchecked(&ping, "test/ping");
     z_owned_publisher_t pub;
-    if (z_declare_publisher(&pub, z_loan(session), z_loan(ping), NULL) < 0) {
+    if (z_declare_publisher(z_loan(session), &pub, z_loan(ping), NULL) < 0) {
         printf("Unable to declare publisher for key expression!\n");
         return -1;
     }
@@ -90,12 +90,12 @@ int main(int argc, char** argv) {
     z_owned_closure_sample_t respond;
     z_closure(&respond, callback, drop, NULL);
     z_owned_subscriber_t sub;
-    if (z_declare_subscriber(&sub, z_loan(session), z_loan(pong), z_move(respond), NULL) < 0) {
+    if (z_declare_subscriber(z_loan(session), &sub, z_loan(pong), z_move(respond), NULL) < 0) {
         printf("Unable to declare subscriber for key expression.\n");
         return -1;
     }
 
-    uint8_t* data = z_malloc(args.size);
+    uint8_t* data = (uint8_t*)z_malloc(args.size);
     for (unsigned int i = 0; i < args.size; i++) {
         data[i] = i % 10;
     }
@@ -107,20 +107,20 @@ int main(int argc, char** argv) {
         while (elapsed_us < args.warmup_ms * 1000) {
             // Create payload
             z_owned_bytes_t payload;
-            z_bytes_serialize_from_slice(&payload, data, args.size);
+            z_bytes_from_buf(&payload, data, args.size, NULL, NULL);
 
             z_publisher_put(z_loan(pub), z_move(payload), NULL);
             z_condvar_wait(z_loan_mut(cond), z_loan_mut(mutex));
             elapsed_us = z_clock_elapsed_us(&warmup_start);
         }
     }
-    unsigned long* results = z_malloc(sizeof(unsigned long) * args.number_of_pings);
+    unsigned long* results = (unsigned long*)z_malloc(sizeof(unsigned long) * args.number_of_pings);
     for (unsigned int i = 0; i < args.number_of_pings; i++) {
         z_clock_t measure_start = z_clock_now();
 
         // Create payload
         z_owned_bytes_t payload;
-        z_bytes_serialize_from_slice(&payload, data, args.size);
+        z_bytes_from_buf(&payload, data, args.size, NULL, NULL);
 
         z_publisher_put(z_loan(pub), z_move(payload), NULL);
         z_condvar_wait(z_loan_mut(cond), z_loan_mut(mutex));
@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
     z_drop(z_move(pub));
     z_drop(z_move(sub));
 
-    z_close(z_move(session));
+    z_drop(z_move(session));
 }
 
 char* getopt(int argc, char** argv, char option) {

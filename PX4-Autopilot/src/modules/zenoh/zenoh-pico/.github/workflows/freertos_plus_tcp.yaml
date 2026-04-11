@@ -14,10 +14,7 @@
 name: freertos_plus_tcp
 
 on:
-  push:
-    branches: [ '**' ]
-  pull_request:
-    branches: [ '**' ]
+  workflow_call:
 
 jobs:
   build:
@@ -33,15 +30,10 @@ jobs:
     - name: Install requirements
       run: |
         sudo apt update
-        sudo apt install -y ninja-build libslirp-dev
+        sudo apt install -y ninja-build libslirp-dev libglib2.0-dev
     - name: Build examples
       run: |
         cd examples/freertos_plus_tcp
-        cmake -Bbuild -G"Ninja Multi-Config"
+        cmake -Bbuild -G"Ninja Multi-Config" -DZ_FEATURE_LINK_UDP_MULTICAST=0 -DZ_CONFIG_SOCKET_TIMEOUT=1000
         cmake --build ./build --config Debug
         cmake --build ./build --config Release
-      env:
-        Z_FEATURE_PUBLICATION: 1
-        Z_FEATURE_SUBSCRIPTION: 1
-        Z_FEATURE_QUERYABLE: 1
-        Z_FEATURE_QUERY: 1

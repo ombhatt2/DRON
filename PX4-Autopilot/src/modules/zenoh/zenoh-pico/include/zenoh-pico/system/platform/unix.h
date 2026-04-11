@@ -19,15 +19,21 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/time.h>
+#if Z_FEATURE_MULTI_THREAD == 1
+#include <pthread.h>
+#endif  // Z_FEATURE_MULTI_THREAD == 1
 
 #include "zenoh-pico/config.h"
 
-#if Z_FEATURE_MULTI_THREAD == 1
-#include <pthread.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+#if Z_FEATURE_MULTI_THREAD == 1
 typedef pthread_t _z_task_t;
 typedef pthread_attr_t z_task_attr_t;
 typedef pthread_mutex_t _z_mutex_t;
+typedef pthread_mutex_t _z_mutex_rec_t;
 typedef pthread_cond_t _z_condvar_t;
 #endif  // Z_FEATURE_MULTI_THREAD == 1
 
@@ -41,6 +47,9 @@ typedef struct {
         int _fd;
 #endif
     };
+#if Z_FEATURE_LINK_TLS == 1
+    void *_tls_sock;  // Pointer to _z_tls_socket_t
+#endif
 } _z_sys_net_socket_t;
 
 typedef struct {
@@ -50,5 +59,9 @@ typedef struct {
 #endif
     };
 } _z_sys_net_endpoint_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZENOH_PICO_SYSTEM_UNIX_TYPES_H */

@@ -15,6 +15,60 @@
 #ifndef INCLUDE_ZENOH_PICO_CONFIG_H
 #define INCLUDE_ZENOH_PICO_CONFIG_H
 
+#ifdef ZENOH_GENERIC
+#include <zenoh_generic_config.h>
+#else
+
+/*--- CMake generated config; pass values to CMake to change the following tokens ---*/
+#define Z_FRAG_MAX_SIZE 4096
+#define Z_BATCH_UNICAST_SIZE 2048
+#define Z_BATCH_MULTICAST_SIZE 2048
+#define Z_CONFIG_SOCKET_TIMEOUT 100
+#define Z_TRANSPORT_LEASE 10000
+#define Z_TRANSPORT_LEASE_EXPIRE_FACTOR 3
+#define ZP_PERIODIC_SCHEDULER_MAX_TASKS 64
+
+/* #undef Z_FEATURE_UNSTABLE_API */
+#define Z_FEATURE_MULTI_THREAD 1
+#define Z_FEATURE_PUBLICATION 1
+#define Z_FEATURE_ADVANCED_PUBLICATION 0
+#define Z_FEATURE_SUBSCRIPTION 1
+#define Z_FEATURE_ADVANCED_SUBSCRIPTION 0
+#define Z_FEATURE_QUERY 1
+#define Z_FEATURE_QUERYABLE 1
+#define Z_FEATURE_LIVELINESS 1
+#define Z_FEATURE_RAWETH_TRANSPORT 0
+#define Z_FEATURE_INTEREST 1
+#define Z_FEATURE_LINK_TCP 1
+#define Z_FEATURE_LINK_BLUETOOTH 0
+#define Z_FEATURE_LINK_WS 0
+#define Z_FEATURE_LINK_SERIAL 0
+#define Z_FEATURE_LINK_SERIAL_USB 0
+#define Z_FEATURE_LINK_TLS 0
+#define Z_FEATURE_SCOUTING 1
+#define Z_FEATURE_LINK_UDP_MULTICAST 1
+#define Z_FEATURE_LINK_UDP_UNICAST 1
+#define Z_FEATURE_MULTICAST_TRANSPORT 1
+#define Z_FEATURE_UNICAST_TRANSPORT 1
+#define Z_FEATURE_FRAGMENTATION 1
+#define Z_FEATURE_ENCODING_VALUES 1
+#define Z_FEATURE_TCP_NODELAY 1
+#define Z_FEATURE_LOCAL_SUBSCRIBER 0
+#define Z_FEATURE_SESSION_CHECK 1
+#define Z_FEATURE_BATCHING 1
+#define Z_FEATURE_BATCH_TX_MUTEX 0
+#define Z_FEATURE_BATCH_PEER_MUTEX 0
+#define Z_FEATURE_MATCHING 1
+#define Z_FEATURE_RX_CACHE 0
+#define Z_FEATURE_UNICAST_PEER 1
+#define Z_FEATURE_AUTO_RECONNECT 1
+#define Z_FEATURE_MULTICAST_DECLARATIONS 0
+#define Z_FEATURE_PERIODIC_TASKS 0
+
+// End of CMake generation
+
+#endif /* ZENOH_GENERIC */
+
 /*------------------ Runtime configuration properties ------------------*/
 /**
  * The library mode.
@@ -30,7 +84,7 @@
  * The locator of a peer to connect to.
  * Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
  * Default value : None.
- * Multiple values are not accepted in zenoh-pico.
+ * Multiple values are accepted in peer to peer unicast mode.
  */
 #define Z_CONFIG_CONNECT_KEY 0x41
 
@@ -38,7 +92,7 @@
  * A locator to listen on.
  * Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
  * Default value : None.
- * Multiple values accepted.
+ * Multiple values are not accepted in zenoh-pico.
  */
 #define Z_CONFIG_LISTEN_KEY 0x42
 
@@ -102,246 +156,59 @@
 #define Z_CONFIG_ADD_TIMESTAMP_KEY 0x4A
 #define Z_CONFIG_ADD_TIMESTAMP_DEFAULT "false"
 
-/*------------------ Compile-time feature configuration ------------------*/
-// WARNING: Default values may always be overridden by CMake/make values
-
-/**
- * Enable multi-thread support.
- */
-#ifndef Z_FEATURE_MULTI_THREAD
-#define Z_FEATURE_MULTI_THREAD 1
-#endif
-
-/**
- * Enable dynamic memory allocation.
- */
-#ifndef Z_FEATURE_DYNAMIC_MEMORY_ALLOCATION
-#define Z_FEATURE_DYNAMIC_MEMORY_ALLOCATION 0
-#endif
-
-/**
- * Enable queryables
- */
-#ifndef Z_FEATURE_QUERYABLE
-#define Z_FEATURE_QUERYABLE 1
-#endif
-
-/**
- * Enable queries
- */
-#ifndef Z_FEATURE_QUERY
-#define Z_FEATURE_QUERY 1
-#endif
-
-/**
- * Enable subscription on this node
- */
-#ifndef Z_FEATURE_SUBSCRIPTION
-#define Z_FEATURE_SUBSCRIPTION 1
-#endif
-
-/**
- * Enable publication
- */
-#ifndef Z_FEATURE_PUBLICATION
-#define Z_FEATURE_PUBLICATION 1
-#endif
-
-/**
- * Enable TCP links.
- */
-#ifndef Z_FEATURE_LINK_TCP
-#define Z_FEATURE_LINK_TCP 1
-#endif
-
-/**
- * Enable Bluetooth links.
- */
-#ifndef Z_FEATURE_LINK_BLUETOOTH
-#define Z_FEATURE_LINK_BLUETOOTH 0
-#endif
-
-/**
- * Enable WebSocket links.
- */
-#ifndef Z_FEATURE_LINK_WS
-#define Z_FEATURE_LINK_WS 0
-#endif
-
-/**
- * Enable Serial links.
- */
-#ifndef Z_FEATURE_LINK_SERIAL
-#define Z_FEATURE_LINK_SERIAL 0
-#endif
-
-/**
- * Enable UDP Scouting.
- */
-#ifndef Z_FEATURE_SCOUTING_UDP
-#define Z_FEATURE_SCOUTING_UDP 1
-#endif
-
-/**
- * Enable UDP Multicast links.
- */
-#ifndef Z_FEATURE_LINK_UDP_MULTICAST
-#define Z_FEATURE_LINK_UDP_MULTICAST 1
-#endif
-
-/**
- * Enable UDP Unicast links.
- */
-#ifndef Z_FEATURE_LINK_UDP_UNICAST
-#define Z_FEATURE_LINK_UDP_UNICAST 1
-#endif
-
-/**
- * Enable Multicast Transport.
- */
-#ifndef Z_FEATURE_MULTICAST_TRANSPORT
-#if Z_FEATURE_SCOUTING_UDP == 0 && Z_FEATURE_LINK_BLUETOOTH == 0 && Z_FEATURE_LINK_UDP_MULTICAST == 0
-#define Z_FEATURE_MULTICAST_TRANSPORT 0
-#else
-#define Z_FEATURE_MULTICAST_TRANSPORT 1
-#endif
-#endif
-
-/**
- * Enable Unicast Transport.
- */
-#ifndef Z_FEATURE_UNICAST_TRANSPORT
-#if Z_FEATURE_LINK_TCP == 0 && Z_FEATURE_LINK_UDP_UNICAST == 0 && Z_FEATURE_LINK_SERIAL == 0 && Z_FEATURE_LINK_WS == 0
-#define Z_FEATURE_UNICAST_TRANSPORT 0
-#else
-#define Z_FEATURE_UNICAST_TRANSPORT 1
-#endif
-#endif
-
-/**
- * Enable raweth transport/link.
- */
-#ifndef Z_FEATURE_RAWETH_TRANSPORT
-#define Z_FEATURE_RAWETH_TRANSPORT 0
-#endif
-
-/**
- * Enable message fragmentation.
- */
-#ifndef Z_FEATURE_FRAGMENTATION
-#define Z_FEATURE_FRAGMENTATION 1
-#endif
-
-/**
- * Enable interests.
- */
-#ifndef Z_FEATURE_INTEREST
-#define Z_FEATURE_INTEREST 0
-#endif
-
-/**
- * Enable encoding values.
- */
-#ifndef Z_FEATURE_ENCODING_VALUES
-#define Z_FEATURE_ENCODING_VALUES 1
-#endif
+/*------------------ TLS configuration properties ------------------*/
+#define Z_CONFIG_TLS_ROOT_CA_CERTIFICATE_KEY 0x4B
+#define Z_CONFIG_TLS_ROOT_CA_CERTIFICATE_BASE64_KEY 0x4C
+#define Z_CONFIG_TLS_LISTEN_PRIVATE_KEY_KEY 0x4D
+#define Z_CONFIG_TLS_LISTEN_PRIVATE_KEY_BASE64_KEY 0x4E
+#define Z_CONFIG_TLS_LISTEN_CERTIFICATE_KEY 0x4F
+#define Z_CONFIG_TLS_LISTEN_CERTIFICATE_BASE64_KEY 0x50
+#define Z_CONFIG_TLS_ENABLE_MTLS_KEY 0x51
+#define Z_CONFIG_TLS_CONNECT_PRIVATE_KEY_KEY 0x52
+#define Z_CONFIG_TLS_CONNECT_PRIVATE_KEY_BASE64_KEY 0x53
+#define Z_CONFIG_TLS_CONNECT_CERTIFICATE_KEY 0x54
+#define Z_CONFIG_TLS_CONNECT_CERTIFICATE_BASE64_KEY 0x55
+#define Z_CONFIG_TLS_VERIFY_NAME_ON_CONNECT_KEY 0x56
 
 /*------------------ Compile-time configuration properties ------------------*/
 /**
  * Default length for Zenoh ID. Maximum size is 16 bytes.
  * This configuration will only be applied to Zenoh IDs generated by Zenoh-Pico.
  */
-#ifndef Z_ZID_LENGTH
 #define Z_ZID_LENGTH 16
-#endif
-
-#ifndef Z_TSID_LENGTH
-#define Z_TSID_LENGTH 16
-#endif
 
 /**
  * Protocol version identifier.
  * Do not change this value.
  */
-#ifndef Z_PROTO_VERSION
 #define Z_PROTO_VERSION 0x09
-#endif
-
-/**
- * Default session lease in milliseconds.
- */
-#ifndef Z_TRANSPORT_LEASE
-#define Z_TRANSPORT_LEASE 10000
-#endif
-
-/**
- * Default session lease expire factor.
- */
-#ifndef Z_TRANSPORT_LEASE_EXPIRE_FACTOR
-#define Z_TRANSPORT_LEASE_EXPIRE_FACTOR 3
-#endif
 
 /**
  * Default multicast session join interval in milliseconds.
  */
-#ifndef Z_JOIN_INTERVAL
 #define Z_JOIN_INTERVAL 2500
-#endif
 
-/**
- * Default socket timeout in milliseconds.
- */
-#ifndef Z_CONFIG_SOCKET_TIMEOUT
-#define Z_CONFIG_SOCKET_TIMEOUT 100
-#endif
-
-#ifndef Z_SN_RESOLUTION
 #define Z_SN_RESOLUTION 0x02
-#endif
-
-#ifndef Z_REQ_RESOLUTION
 #define Z_REQ_RESOLUTION 0x02
-#endif
 
 /**
- * Default size for an IO slice.
+ * Default size for the rx cache size (if activated).
  */
-#ifndef Z_IOSLICE_SIZE
-#define Z_IOSLICE_SIZE 128
-#endif
-
-/**
- * Default maximum batch size possible to be received or sent.
- */
-#ifndef Z_BATCH_UNICAST_SIZE
-#define Z_BATCH_UNICAST_SIZE 65535
-#endif
-/**
- * Default maximum batch size possible to be received or sent.
- */
-#ifndef Z_BATCH_MULTICAST_SIZE
-#define Z_BATCH_MULTICAST_SIZE 8192
-#endif
-
-/**
- * Default maximum size for fragmented messages.
- */
-#ifndef Z_FRAG_MAX_SIZE
-#define Z_FRAG_MAX_SIZE 300000
-#endif
-
-/**
- * Default "nop" instruction
- */
-#ifndef ZP_ASM_NOP
-#define ZP_ASM_NOP __asm__("nop")
-#endif
+#define Z_RX_CACHE_SIZE 10
 
 /**
  * Default get timeout in milliseconds.
  */
-#ifndef Z_GET_TIMEOUT_DEFAULT
 #define Z_GET_TIMEOUT_DEFAULT 10000
-#endif
+
+/**
+ * Maximum number of connections for unicast listen sockets.
+ */
+#define Z_LISTEN_MAX_CONNECTION_NB 10
+
+/**
+ * Default "nop" instruction
+ */
+#define ZP_ASM_NOP __asm__("nop")
 
 #endif /* INCLUDE_ZENOH_PICO_CONFIG_H */

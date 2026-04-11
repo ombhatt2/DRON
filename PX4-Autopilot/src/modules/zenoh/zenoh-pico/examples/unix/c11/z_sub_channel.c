@@ -19,40 +19,23 @@
 #include <zenoh-pico.h>
 
 #if Z_FEATURE_SUBSCRIPTION == 1
-int main(int argc, char **argv) {
-    const char *keyexpr = "demo/example/**";
-    char *locator = NULL;
 
-    int opt;
-    while ((opt = getopt(argc, argv, "k:e:")) != -1) {
-        switch (opt) {
-            case 'k':
-                keyexpr = optarg;
-                break;
-            case 'e':
-                locator = optarg;
-                break;
-            case '?':
-                if (optopt == 'k' || optopt == 'e') {
-                    fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-                } else {
-                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-                }
-                return 1;
-            default:
-                return -1;
-        }
-    }
+static int parse_args(int argc, char **argv, z_owned_config_t *config, char **keyexpr);
+
+int main(int argc, char **argv) {
+    char *keyexpr = "demo/example/**";
 
     z_owned_config_t config;
     z_config_default(&config);
-    if (locator != NULL) {
-        zp_config_insert(z_loan_mut(config), Z_CONFIG_CONNECT_KEY, locator);
+
+    int ret = parse_args(argc, argv, &config, &keyexpr);
+    if (ret != 0) {
+        return ret;
     }
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
+    if (z_open(&s, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -60,7 +43,7 @@ int main(int argc, char **argv) {
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_loan_mut(s), NULL) < 0 || zp_start_lease_task(z_loan_mut(s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
 
@@ -71,32 +54,67 @@ int main(int argc, char **argv) {
 
     z_owned_subscriber_t sub;
     z_view_keyexpr_t ke;
-    z_view_keyexpr_from_str(&ke, keyexpr);
-    if (z_declare_subscriber(&sub, z_loan(s), z_loan(ke), z_move(closure), NULL) < 0) {
+    if (z_view_keyexpr_from_str(&ke, keyexpr) < 0) {
+        printf("%s is not a valid key expression\n", keyexpr);
+        return -1;
+    }
+    if (z_declare_subscriber(z_loan(s), &sub, z_loan(ke), z_move(closure), NULL) < 0) {
         printf("Unable to declare subscriber.\n");
         return -1;
     }
 
     z_owned_sample_t sample;
-    z_null(&sample);
-    for (z_recv(z_loan(handler), &sample); z_check(sample); z_recv(z_loan(handler), &sample)) {
+    for (z_result_t res = z_recv(z_loan(handler), &sample); res == Z_OK; res = z_recv(z_loan(handler), &sample)) {
         z_view_string_t keystr;
         z_keyexpr_as_view_string(z_sample_keyexpr(z_loan(sample)), &keystr);
         z_owned_string_t value;
-        z_bytes_deserialize_into_string(z_sample_payload(z_loan(sample)), &value);
-        printf(">> [Subscriber] Received ('%s': '%s')\n", z_string_data(z_loan(keystr)), z_string_data(z_loan(value)));
+        z_bytes_to_string(z_sample_payload(z_loan(sample)), &value);
+        printf(">> [Subscriber] Received ('%.*s': '%.*s')\n", (int)z_string_len(z_loan(keystr)),
+               z_string_data(z_loan(keystr)), (int)z_string_len(z_loan(value)), z_string_data(z_loan(value)));
         z_drop(z_move(value));
         z_drop(z_move(sample));
-        z_null(&sample);
     }
 
-    z_undeclare_subscriber(z_move(sub));
+    z_drop(z_move(sub));
     z_drop(z_move(handler));
 
-    z_close(z_move(s));
+    z_drop(z_move(s));
 
     return 0;
 }
+
+// Note: All args can be specified multiple times. For "-e" it will append the list of endpoints, for the other it will
+// simply replace the previous value.
+static int parse_args(int argc, char **argv, z_owned_config_t *config, char **keyexpr) {
+    int opt;
+    while ((opt = getopt(argc, argv, "k:e:m:l:")) != -1) {
+        switch (opt) {
+            case 'k':
+                *keyexpr = optarg;
+                break;
+            case 'e':
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_CONNECT_KEY, optarg);
+                break;
+            case 'm':
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_MODE_KEY, optarg);
+                break;
+            case 'l':
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_LISTEN_KEY, optarg);
+                break;
+            case '?':
+                if (optopt == 'k' || optopt == 'e' || optopt == 'm' || optopt == 'l') {
+                    fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+                } else {
+                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+                }
+                return 1;
+            default:
+                return -1;
+        }
+    }
+    return 0;
+}
+
 #else
 int main(void) {
     printf("ERROR: Zenoh pico was compiled without Z_FEATURE_SUBSCRIPTION but this example requires it.\n");

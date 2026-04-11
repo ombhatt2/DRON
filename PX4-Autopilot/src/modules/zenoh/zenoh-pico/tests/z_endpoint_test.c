@@ -20,121 +20,110 @@
 #include "zenoh-pico/link/config/udp.h"
 #include "zenoh-pico/link/endpoint.h"
 #include "zenoh-pico/utils/result.h"
+#if Z_FEATURE_LINK_TLS == 1
+#include "zenoh-pico/link/config/tls.h"
+#endif
 
 #undef NDEBUG
 #include <assert.h>
 
 int main(void) {
-    char *s = (char *)malloc(64);
-
     // Locator
     printf(">>> Testing locators...\n");
 
-    int8_t ret = _Z_RES_OK;
     _z_locator_t lc;
 
-    snprintf(s, 64, "tcp/127.0.0.1:7447");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, s);
-    assert(ret == _Z_RES_OK);
-    assert(_z_str_eq(lc._protocol, "tcp") == true);
-    assert(_z_str_eq(lc._address, "127.0.0.1:7447") == true);
+    _z_string_t str = _z_string_alias_str("tcp/127.0.0.1:7447");
+    assert(_z_locator_from_string(&lc, &str) == _Z_RES_OK);
+
+    str = _z_string_alias_str("tcp");
+    assert(_z_string_equals(&lc._protocol, &str) == true);
+    str = _z_string_alias_str("127.0.0.1:7447");
+    assert(_z_string_equals(&lc._address, &str) == true);
     assert(_z_str_intmap_is_empty(&lc._metadata) == true);
     _z_locator_clear(&lc);
 
-    s[0] = '\0';  // snprintf(s, "");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("");
+    assert(_z_locator_from_string(&lc, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_locator_clear(&lc);
 
-    snprintf(s, 64, "/");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, "/");
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("/");
+    assert(_z_locator_from_string(&lc, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_locator_clear(&lc);
 
-    snprintf(s, 64, "tcp");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("tcp");
+    assert(_z_locator_from_string(&lc, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_locator_clear(&lc);
 
-    snprintf(s, 64, "tcp/");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("tcp/");
+    assert(_z_locator_from_string(&lc, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_locator_clear(&lc);
 
-    snprintf(s, 64, "127.0.0.1:7447");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("127.0.0.1:7447");
+    assert(_z_locator_from_string(&lc, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_locator_clear(&lc);
 
-    snprintf(s, 64, "tcp/127.0.0.1:7447?");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, s);
-    assert(ret == _Z_RES_OK);
+    str = _z_string_alias_str("tcp/127.0.0.1:7447?");
+    assert(_z_locator_from_string(&lc, &str) == _Z_RES_OK);
+    _z_locator_clear(&lc);
 
     // No metadata defined so far... but this is a valid syntax in principle
-    snprintf(s, 64, "tcp/127.0.0.1:7447?invalid=ctrl");
-    printf("- %s\n", s);
-    ret = _z_locator_from_str(&lc, s);
-    assert(ret == _Z_RES_OK);
+    str = _z_string_alias_str("tcp/127.0.0.1:7447?invalid=ctrl");
+    assert(_z_locator_from_string(&lc, &str) == _Z_RES_OK);
+    _z_locator_clear(&lc);
 
     // Endpoint
     printf(">>> Testing endpoints...\n");
 
     _z_endpoint_t ep;
 
-    snprintf(s, 64, "tcp/127.0.0.1:7447");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_RES_OK);
-    assert(_z_str_eq(ep._locator._protocol, "tcp") == true);
-    assert(_z_str_eq(ep._locator._address, "127.0.0.1:7447") == true);
+    str = _z_string_alias_str("tcp/127.0.0.1:7447");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+
+    str = _z_string_alias_str("tcp");
+    assert(_z_string_equals(&ep._locator._protocol, &str) == true);
+    str = _z_string_alias_str("127.0.0.1:7447");
+    assert(_z_string_equals(&ep._locator._address, &str) == true);
     assert(_z_str_intmap_is_empty(&ep._locator._metadata) == true);
     assert(_z_str_intmap_is_empty(&ep._config) == true);
     _z_endpoint_clear(&ep);
 
-    s[0] = '\0';  // snprintf(s, "");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "/");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("/");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "tcp");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("tcp");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "tcp");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("tcp/");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "127.0.0.1:7447");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_ERR_MESSAGE_DESERIALIZATION_FAILED);
+    str = _z_string_alias_str("127.0.0.1:7447");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "tcp/127.0.0.1:7447?");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_RES_OK);
+    str = _z_string_alias_str("tcp/127.0.0.1:7447?");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+    _z_endpoint_clear(&ep);
 
     // No metadata defined so far... but this is a valid syntax in principle
-    snprintf(s, 64, "tcp/127.0.0.1:7447?invalid=ctrl");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_RES_OK);
+    str = _z_string_alias_str("tcp/127.0.0.1:7447?invalid=ctrl");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "udp/127.0.0.1:7447#%s=eth0", UDP_CONFIG_IFACE_STR);
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_RES_OK);
-    assert(_z_str_eq(ep._locator._protocol, "udp") == true);
-    assert(_z_str_eq(ep._locator._address, "127.0.0.1:7447") == true);
+    str = _z_string_alias_str("udp/127.0.0.1:7447#iface=eth0");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+
+    str = _z_string_alias_str("udp");
+    assert(_z_string_equals(&ep._locator._protocol, &str) == true);
+    str = _z_string_alias_str("127.0.0.1:7447");
+    assert(_z_string_equals(&ep._locator._address, &str) == true);
     assert(_z_str_intmap_is_empty(&ep._locator._metadata) == true);
     assert(_z_str_intmap_len(&ep._config) == 1);
     char *p = _z_str_intmap_get(&ep._config, UDP_CONFIG_IFACE_KEY);
@@ -142,20 +131,47 @@ int main(void) {
     (void)(p);
     _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "udp/127.0.0.1:7447#invalid=eth0");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_RES_OK);
+    str = _z_string_alias_str("udp/127.0.0.1:7447#invalid=eth0");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "udp/127.0.0.1:7447?invalid=ctrl#%s=eth0", UDP_CONFIG_IFACE_STR);
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_RES_OK);
+    str = _z_string_alias_str("udp/127.0.0.1:7447?invalid=ctrl#iface=eth0");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+    _z_endpoint_clear(&ep);
 
-    snprintf(s, 64, "udp/127.0.0.1:7447?invalid=ctrl#invalid=eth0");
-    printf("- %s\n", s);
-    ret = _z_endpoint_from_str(&ep, s);
-    assert(ret == _Z_RES_OK);
+    str = _z_string_alias_str("udp/127.0.0.1:7447?invalid=ctrl#invalid=eth0");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+    _z_endpoint_clear(&ep);
+
+#if Z_FEATURE_LINK_TLS == 1
+    str = _z_string_alias_str("tls/localhost:7447#root_ca_certificate=/path/ca.pem");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+
+    str = _z_string_alias_str("tls");
+    assert(_z_string_equals(&ep._locator._protocol, &str) == true);
+    str = _z_string_alias_str("localhost:7447");
+    assert(_z_string_equals(&ep._locator._address, &str) == true);
+    assert(_z_str_intmap_len(&ep._config) == 1);
+    char *ca_path = _z_str_intmap_get(&ep._config, TLS_CONFIG_ROOT_CA_CERTIFICATE_KEY);
+    assert(_z_str_eq(ca_path, "/path/ca.pem") == true);
+    _z_endpoint_clear(&ep);
+
+    str = _z_string_alias_str("tls/[::1]:7447");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+    _z_endpoint_clear(&ep);
+
+    str = _z_string_alias_str("tls/localhost:7447#invalid=value");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_RES_OK);
+    _z_endpoint_clear(&ep);
+
+    str = _z_string_alias_str("tls/");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_endpoint_clear(&ep);
+
+    str = _z_string_alias_str("tls");
+    assert(_z_endpoint_from_string(&ep, &str) == _Z_ERR_CONFIG_LOCATOR_INVALID);
+    _z_endpoint_clear(&ep);
+#endif
 
     return 0;
 }

@@ -54,21 +54,13 @@ FetchContent_MakeAvailable(freertos_kernel freertos_plus_tcp)
 
 set(BUILD_SHARED_LIBS OFF)
 set(WITH_FREERTOS_PLUS_TCP ON)
-set(ZENOH_DEBUG 3)
-configure_include_project(ZENOHPICO zenohpico zenohpico "../.." zenohpico "https://github.com/eclipse-zenoh/zenoh-pico" "")
+set(ZENOH_LOG DEBUG)
+configure_include_project(ZENOHPICO zenohpico zenohpico::lib "../.." zenohpico "https://github.com/eclipse-zenoh/zenoh-pico" "")
 
-target_link_libraries(zenohpico
-  freertos_kernel
-  freertos_plus_tcp
-)
-target_compile_definitions(zenohpico
-  PUBLIC
-    Z_FEATURE_MULTI_THREAD=1
-    Z_FEATURE_LINK_TCP=1
-    Z_FEATURE_SCOUTING_UDP=1
-    Z_FEATURE_LINK_UDP_UNICAST=1
-    Z_FEATURE_LINK_UDP_MULTICAST=0
-    Z_CONFIG_SOCKET_TIMEOUT=1000
+target_link_libraries(zenohpico_static
+  PRIVATE
+    freertos_kernel
+    freertos_plus_tcp
 )
 
 add_library(main OBJECT main.c)
@@ -83,7 +75,7 @@ function(add_example name)
     main
     freertos_kernel
     freertos_plus_tcp
-    zenohpico
+    zenohpico::lib
   )
 endfunction()
 

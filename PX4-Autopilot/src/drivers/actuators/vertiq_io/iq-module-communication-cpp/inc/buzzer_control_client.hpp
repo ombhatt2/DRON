@@ -44,10 +44,14 @@ class BuzzerControlClient: public ClientAbstract{
     ClientEntry<uint8_t>  volume_;
     ClientEntry<uint16_t> duration_;
 
-    void ReadMsg(uint8_t* rx_data, uint8_t rx_length)
-    {
-      static const uint8_t kEntryLength = kSubDuration+1;
-      ClientEntryAbstract* entry_array[kEntryLength] = {
+    uint16_t GetNumberOfClientEntries(){
+      return kSubDuration + 1;
+    }
+
+    void GetClientEntryList(ClientEntryAbstract ** client_entries){
+      uint16_t num_entries = GetNumberOfClientEntries();
+
+      ClientEntryAbstract* entry_array[num_entries] = {
         &ctrl_mode_,  // 0
         &ctrl_brake_, // 1
         &ctrl_coast_, // 2
@@ -58,7 +62,9 @@ class BuzzerControlClient: public ClientAbstract{
         &duration_,   // 7
       };
 
-      ParseMsg(rx_data, rx_length, entry_array, kEntryLength);
+      for(uint16_t entry = 0; entry < num_entries; entry++){
+        client_entries[entry] = entry_array[entry];
+      }
     }
 
   private:

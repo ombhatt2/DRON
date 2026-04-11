@@ -2,6 +2,79 @@
 Changelog for package rosidl_typesupport_introspection_tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+4.9.3 (2024-12-20)
+------------------
+
+4.9.2 (2024-11-25)
+------------------
+
+4.9.1 (2024-11-20)
+------------------
+
+4.9.0 (2024-10-03)
+------------------
+
+4.8.1 (2024-06-25)
+------------------
+
+4.8.0 (2024-06-17)
+------------------
+* Suppress false positive warnings from gcc. (`#811 <https://github.com/ros2/rosidl/issues/811>`_)
+* Contributors: Chris Lalancette
+
+4.7.0 (2024-04-26)
+------------------
+
+4.6.0 (2024-04-16)
+------------------
+* One last uncrustify fix for newer uncrustify. (`#795 <https://github.com/ros2/rosidl/issues/795>`_)
+* Contributors: Chris Lalancette
+
+4.5.2 (2024-03-27)
+------------------
+
+4.5.1 (2024-02-07)
+------------------
+
+4.5.0 (2023-12-26)
+------------------
+
+4.4.2 (2023-11-06)
+------------------
+
+4.4.1 (2023-10-04)
+------------------
+* Disable zero-variadic-macro-arguments warning when using clang. (`#768 <https://github.com/ros2/rosidl/issues/768>`_)
+* Contributors: Chris Lalancette
+
+4.4.0 (2023-09-07)
+------------------
+* Fixed C++20 warning implicit capture of this in lambda (`#766 <https://github.com/ros2/rosidl/issues/766>`_)
+* Contributors: AiVerisimilitude
+
+4.3.1 (2023-08-21)
+------------------
+
+4.3.0 (2023-07-11)
+------------------
+
+4.2.0 (2023-06-07)
+------------------
+
+4.1.1 (2023-05-11)
+------------------
+
+4.1.0 (2023-04-28)
+------------------
+
+4.0.0 (2023-04-11)
+------------------
+* Fix a few more clang analysis problems. (`#731 <https://github.com/ros2/rosidl/issues/731>`_)
+  In particular, make sure to mark the fact that we are
+  C++17 (as the emplace_back signature changed), and also
+  add in a few more (void)_ for benchmark tests.
+* Contributors: Chris Lalancette
+
 3.4.0 (2023-02-13)
 ------------------
 * [service introspection] generate service_event messages (`#700 <https://github.com/ros2/rosidl/issues/700>`_)

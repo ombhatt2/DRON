@@ -20,35 +20,94 @@
 #include <zenoh-pico.h>
 
 #if Z_FEATURE_PUBLICATION == 1
+
+static int parse_args(int argc, char **argv, z_owned_config_t *config, char **keyexpr, char **value, int *n);
+
 int main(int argc, char **argv) {
-    const char *keyexpr = "demo/example/zenoh-pico-pub";
+    char *keyexpr = "demo/example/zenoh-pico-pub";
     char *const default_value = "Pub from Pico!";
-    const char *value = default_value;
-    const char *mode = "client";
-    char *clocator = NULL;
-    char *llocator = NULL;
+    char *value = default_value;
     int n = 2147483647;  // max int value by default
 
+    z_owned_config_t config;
+    z_config_default(&config);
+
+    int ret = parse_args(argc, argv, &config, &keyexpr, &value, &n);
+    if (ret != 0) {
+        return ret;
+    }
+
+    printf("Opening session...\n");
+    z_owned_session_t s;
+    if (z_open(&s, z_move(config), NULL) < 0) {
+        printf("Unable to open session!\n");
+        return -1;
+    }
+
+    printf("Declaring publisher for '%s'...\n", keyexpr);
+    z_owned_publisher_t pub;
+    z_view_keyexpr_t ke;
+    if (z_view_keyexpr_from_str(&ke, keyexpr) < 0) {
+        printf("%s is not a valid key expression\n", keyexpr);
+        return -1;
+    }
+    if (z_declare_publisher(z_loan(s), &pub, z_loan(ke), NULL) < 0) {
+        printf("Unable to declare publisher for key expression!\n");
+        return -1;
+    }
+    // Read received declaration
+    zp_read(z_loan(s), NULL);
+    // Main loop
+    printf("Press CTRL-C to quit...\n");
+    char buf[256];
+    z_clock_t pulse_time = z_clock_now();
+    for (int idx = 0; idx < n; idx++) {
+        z_sleep_s(1);
+        sprintf(buf, "[%4d] %s", idx, value);
+        printf("Putting Data ('%s': '%s')...\n", keyexpr, buf);
+
+        // Create payload
+        z_owned_bytes_t payload;
+        z_bytes_copy_from_str(&payload, buf);
+
+        z_publisher_put(z_loan(pub), z_move(payload), NULL);
+
+        zp_read(z_loan(s), NULL);
+        unsigned long elapsed_ms = z_clock_elapsed_ms(&pulse_time);
+        if (elapsed_ms >= (Z_TRANSPORT_LEASE / Z_TRANSPORT_LEASE_EXPIRE_FACTOR)) {
+            pulse_time = z_clock_now();
+            zp_send_keep_alive(z_loan(s), NULL);
+            zp_send_join(z_loan(s), NULL);
+        }
+    }
+    z_drop(z_move(pub));
+    z_drop(z_move(s));
+    return 0;
+}
+
+// Note: All args can be specified multiple times. For "-e" it will append the list of endpoints, for the other it will
+// simply replace the previous value.
+static int parse_args(int argc, char **argv, z_owned_config_t *config, char **keyexpr, char **value, int *n) {
     int opt;
     while ((opt = getopt(argc, argv, "k:v:e:m:l:n:")) != -1) {
         switch (opt) {
             case 'k':
-                keyexpr = optarg;
+                *keyexpr = optarg;
                 break;
             case 'v':
-                value = optarg;
+                *value = optarg;
                 break;
             case 'e':
-                clocator = optarg;
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_CONNECT_KEY, optarg);
                 break;
             case 'm':
-                mode = optarg;
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_MODE_KEY, optarg);
                 break;
             case 'l':
-                llocator = optarg;
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_LISTEN_KEY, optarg);
                 break;
             case 'n':
-                n = atoi(optarg);
+                *n = atoi(optarg);
                 break;
             case '?':
                 if (optopt == 'k' || optopt == 'v' || optopt == 'e' || optopt == 'm' || optopt == 'l' ||
@@ -62,54 +121,9 @@ int main(int argc, char **argv) {
                 return -1;
         }
     }
-
-    z_owned_config_t config;
-    z_config_default(&config);
-    zp_config_insert(z_loan_mut(config), Z_CONFIG_MODE_KEY, mode);
-    if (clocator != NULL) {
-        zp_config_insert(z_loan_mut(config), Z_CONFIG_CONNECT_KEY, clocator);
-    }
-    if (llocator != NULL) {
-        zp_config_insert(z_loan_mut(config), Z_CONFIG_LISTEN_KEY, llocator);
-    }
-
-    printf("Opening session...\n");
-    z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
-        printf("Unable to open session!\n");
-        return -1;
-    }
-
-    printf("Declaring publisher for '%s'...\n", keyexpr);
-    z_owned_publisher_t pub;
-    z_view_keyexpr_t ke;
-    z_view_keyexpr_from_str(&ke, keyexpr);
-    if (z_declare_publisher(&pub, z_loan(s), z_loan(ke), NULL) < 0) {
-        printf("Unable to declare publisher for key expression!\n");
-        return -1;
-    }
-    // Main loop
-    printf("Press CTRL-C to quit...\n");
-    char buf[256];
-    for (int idx = 0; idx < n; idx++) {
-        sleep(1);
-        sprintf(buf, "[%4d] %s", idx, value);
-        printf("Putting Data ('%s': '%s')...\n", keyexpr, buf);
-
-        // Create payload
-        z_owned_bytes_t payload;
-        z_bytes_serialize_from_str(&payload, buf);
-
-        z_publisher_put(z_loan(pub), z_move(payload), NULL);
-
-        zp_read(z_loan(s), NULL);
-        zp_send_keep_alive(z_loan(s), NULL);
-        zp_send_join(z_loan(s), NULL);
-    }
-    z_undeclare_publisher(z_move(pub));
-    z_close(z_move(s));
     return 0;
 }
+
 #else
 int main(void) {
     printf("ERROR: Zenoh pico was compiled without Z_FEATURE_PUBLICATION but this example requires it.\n");

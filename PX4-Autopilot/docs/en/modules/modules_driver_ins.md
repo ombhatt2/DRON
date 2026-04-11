@@ -9,7 +9,7 @@ Source: [drivers/ins/microstrain](https://github.com/PX4/PX4-Autopilot/tree/main
 MicroStrain by HBK Inertial Sensor Driver.
 Currently supports the following sensors:
 
--[CV7-AR](https://www.hbkworld.com/en/products/transducers/inertial-sensors/vertical-reference-units--vru-/3dm-cv7-ar) -[CV7-AHRS](https://www.hbkworld.com/en/products/transducers/inertial-sensors/attitude-and-heading-reference-systems--ahrs-/3dm-cv7-ahrs) -[CV7-INS](https://www.hbkworld.com/en/products/transducers/inertial-sensors/inertial-navigation-systems--ins-/3dm-cv7-ins) -[CV7-GNSS/INS](https://www.hbkworld.com/en/products/transducers/inertial-sensors/inertial-navigation-systems--ins-/3dm-cv7-gnss-ins)
+-[CV7-AR](https://www.hbkworld.com/en/products/transducers/inertial-sensors/vertical-reference-units--vru-/3dm-cv7-ar) -[CV7-AHRS](https://www.hbkworld.com/en/products/transducers/inertial-sensors/attitude-and-heading-reference-systems--ahrs-/3dm-cv7-ahrs) -[CV7-INS](https://www.hbkworld.com/en/products/transducers/inertial-sensors/navigation/3dm-cv7-ins) -[CV7-GNSS/INS](https://www.hbkworld.com/en/products/transducers/inertial-sensors/navigation/3dm-cv7-gnss-ins)
 
 This driver is not included in the firmware by default.
 Include the module in firmware by setting the
@@ -43,6 +43,41 @@ MicroStrain <command> [arguments...]
    stop          Stop driver
 
    status        Driver status
+```
+
+## eulernav_bahrs
+
+Source: [drivers/ins/eulernav_bahrs](https://github.com/PX4/PX4-Autopilot/tree/main/src/drivers/ins/eulernav_bahrs)
+
+### Description
+
+Serial bus driver for the EULER-NAV Baro-Inertial AHRS.
+
+### Examples
+
+Attempt to start driver on a specified serial device.
+
+```
+eulernav_bahrs start -d /dev/ttyS1
+```
+
+Stop driver
+
+```
+eulernav_bahrs stop
+```
+
+### Usage {#eulernav_bahrs_usage}
+
+```
+eulernav_bahrs <command> [arguments...]
+ Commands:
+   start         Start driver
+     -d <val>    Serial device
+
+   status        Print driver status
+
+   stop          Stop driver
 ```
 
 ## ilabs
@@ -88,6 +123,31 @@ ilabs <command> [arguments...]
    stop          Stop driver
 
    status        Print driver status
+```
+
+## sbgecom
+
+Source: [drivers/ins/sbgecom](https://github.com/PX4/PX4-Autopilot/tree/main/src/drivers/ins/sbgecom)
+
+Description du module
+
+### Usage {#sbgecom_usage}
+
+```
+sbgecom <command> [arguments...]
+ Commands:
+   start         Start driver
+     [-d <val>]  Serial device
+                 default: /dev/ttyS0
+     [-b <val>]  Baudrate device
+                 default: 921600
+     [-f <val>]  Config JSON file path
+                 default: /etc/extras/sbg_settings\.json
+     [-s <val>]  Config JSON string
+
+   status        Driver status
+
+   stop          Stop driver
 ```
 
 ## vectornav

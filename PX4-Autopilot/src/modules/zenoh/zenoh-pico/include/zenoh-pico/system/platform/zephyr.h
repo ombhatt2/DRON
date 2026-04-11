@@ -19,10 +19,10 @@
 
 #if KERNEL_VERSION_MAJOR == 2
 #include <kernel.h>
-#elif KERNEL_VERSION_MAJOR == 3
+#elif KERNEL_VERSION_MAJOR == 3 || KERNEL_VERSION_MAJOR == 4
 #include <zephyr/kernel.h>
 #else
-#pragma "This Zephyr version might not be supported."
+#pragma GCC warning "This Zephyr version might not be supported."
 #include <zephyr/kernel.h>
 #endif
 
@@ -30,10 +30,15 @@
 
 #include "zenoh-pico/config.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if Z_FEATURE_MULTI_THREAD == 1
 typedef pthread_t _z_task_t;
 typedef pthread_attr_t z_task_attr_t;
 typedef pthread_mutex_t _z_mutex_t;
+typedef pthread_mutex_t _z_mutex_rec_t;
 typedef pthread_cond_t _z_condvar_t;
 #endif  // Z_FEATURE_MULTI_THREAD == 1
 
@@ -58,5 +63,9 @@ typedef struct {
 #endif
     };
 } _z_sys_net_endpoint_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZENOH_PICO_SYSTEM_ZEPHYR_TYPES_H */

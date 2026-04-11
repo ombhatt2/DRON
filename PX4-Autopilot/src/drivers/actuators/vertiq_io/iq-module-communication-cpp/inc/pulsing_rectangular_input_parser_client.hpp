@@ -25,19 +25,29 @@ class PulsingRectangularInputParserClient : public ClientAbstract {
     PulsingRectangularInputParserClient(uint8_t obj_idn)
         : ClientAbstract(kTypePulsingRectangularInputParser, obj_idn),
           pulsing_voltage_mode_(kTypePulsingRectangularInputParser, obj_idn, kSubPulsingVoltageMode),
-          pulsing_voltage_limit_(kTypePulsingRectangularInputParser, obj_idn, kSubPulsingVoltageLimit){};
+          pulsing_voltage_limit_(kTypePulsingRectangularInputParser, obj_idn, kSubPulsingVoltageLimit)
+          {
+          };
 
     // Client Entries
     ClientEntry<uint8_t> pulsing_voltage_mode_;
     ClientEntry<float> pulsing_voltage_limit_;
 
-    void ReadMsg(uint8_t* rx_data, uint8_t rx_length) {
-        static const uint8_t kEntryLength              = kSubPulsingVoltageLimit + 1;
-        ClientEntryAbstract* entry_array[kEntryLength] = {
-            &pulsing_voltage_mode_,  // 0
-            &pulsing_voltage_limit_  // 1
-        };
-        ParseMsg(rx_data, rx_length, entry_array, kEntryLength);
+    uint16_t GetNumberOfClientEntries(){
+      return kSubPulsingVoltageLimit + 1;
+    }
+
+    void GetClientEntryList(ClientEntryAbstract ** client_entries){
+      uint16_t num_entries = GetNumberOfClientEntries();
+
+      ClientEntryAbstract* entry_array[num_entries] = {
+        &pulsing_voltage_mode_,  // 0
+        &pulsing_voltage_limit_  // 1
+      };
+
+      for(uint16_t entry = 0; entry < num_entries; entry++){
+        client_entries[entry] = entry_array[entry];
+      }
     }
 
    private:

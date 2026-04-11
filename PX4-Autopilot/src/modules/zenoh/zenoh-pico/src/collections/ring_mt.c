@@ -19,7 +19,7 @@
 #include "zenoh-pico/utils/logging.h"
 
 /*-------- Ring Buffer Multithreaded --------*/
-int8_t _z_ring_mt_init(_z_ring_mt_t *ring, size_t capacity) {
+z_result_t _z_ring_mt_init(_z_ring_mt_t *ring, size_t capacity) {
     _Z_RETURN_IF_ERR(_z_ring_init(&ring->_ring, capacity))
 
 #if Z_FEATURE_MULTI_THREAD == 1
@@ -37,7 +37,7 @@ _z_ring_mt_t *_z_ring_mt_new(size_t capacity) {
         return NULL;
     }
 
-    int8_t ret = _z_ring_mt_init(ring, capacity);
+    z_result_t ret = _z_ring_mt_init(ring, capacity);
     if (ret != _Z_RES_OK) {
         _Z_ERROR("_z_ring_mt_init failed: %i", ret);
         return NULL;
@@ -61,9 +61,9 @@ void _z_ring_mt_free(_z_ring_mt_t *ring, z_element_free_f free_f) {
     z_free(ring);
 }
 
-int8_t _z_ring_mt_push(const void *elem, void *context, z_element_free_f element_free) {
+z_result_t _z_ring_mt_push(const void *elem, void *context, z_element_free_f element_free) {
     if (elem == NULL || context == NULL) {
-        return _Z_ERR_GENERIC;
+        _Z_ERROR_RETURN(_Z_ERR_GENERIC);
     }
 
     _z_ring_mt_t *r = (_z_ring_mt_t *)context;
@@ -81,7 +81,7 @@ int8_t _z_ring_mt_push(const void *elem, void *context, z_element_free_f element
     return _Z_RES_OK;
 }
 
-int8_t _z_ring_mt_close(_z_ring_mt_t *ring) {
+z_result_t _z_ring_mt_close(_z_ring_mt_t *ring) {
 #if Z_FEATURE_MULTI_THREAD == 1
     _Z_RETURN_IF_ERR(_z_mutex_lock(&ring->_mutex))
     ring->is_closed = true;
@@ -93,7 +93,7 @@ int8_t _z_ring_mt_close(_z_ring_mt_t *ring) {
     return _Z_RES_OK;
 }
 
-int8_t _z_ring_mt_pull(void *dst, void *context, z_element_move_f element_move) {
+z_result_t _z_ring_mt_pull(void *dst, void *context, z_element_move_f element_move) {
     _z_ring_mt_t *r = (_z_ring_mt_t *)context;
 
 #if Z_FEATURE_MULTI_THREAD == 1
@@ -107,19 +107,22 @@ int8_t _z_ring_mt_pull(void *dst, void *context, z_element_move_f element_move) 
         }
     }
     _Z_RETURN_IF_ERR(_z_mutex_unlock(&r->_mutex))
-    if (r->is_closed && src == NULL) return _Z_RES_CHANNEL_CLOSED;
-    element_move(dst, src);
 #else   // Z_FEATURE_MULTI_THREAD == 1
     void *src = _z_ring_pull(&r->_ring);
+#endif  // Z_FEATURE_MULTI_THREAD == 1
+
+    if (r->is_closed && src == NULL) {
+        return _Z_RES_CHANNEL_CLOSED;
+    }
+
     if (src != NULL) {
         element_move(dst, src);
     }
-#endif  // Z_FEATURE_MULTI_THREAD == 1
 
     return _Z_RES_OK;
 }
 
-int8_t _z_ring_mt_try_pull(void *dst, void *context, z_element_move_f element_move) {
+z_result_t _z_ring_mt_try_pull(void *dst, void *context, z_element_move_f element_move) {
     _z_ring_mt_t *r = (_z_ring_mt_t *)context;
 
 #if Z_FEATURE_MULTI_THREAD == 1
@@ -136,6 +139,8 @@ int8_t _z_ring_mt_try_pull(void *dst, void *context, z_element_move_f element_mo
         element_move(dst, src);
     } else if (r->is_closed) {
         return _Z_RES_CHANNEL_CLOSED;
+    } else {
+        return _Z_RES_CHANNEL_NODATA;
     }
     return _Z_RES_OK;
 }

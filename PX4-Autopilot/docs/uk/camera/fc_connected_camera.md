@@ -79,7 +79,7 @@ PX4 підтримує наступні команди MAVLink для камер
 
 ## Налаштування спрацьовування
 
-Камери можна підключати до FC для виклику за допомогою різних інтерфейсів, таких як PWM та GPIO, вказавши відповідний [задній інтерфейс тригера](#trigger-interface-backends).
+Cameras can be connected to the FC for triggering using different interfaces, such as PWM, and GPIO, by specifying the appropriate [trigger interface backend](#trigger-interface-backends).
 Ви також можете вказати камеру [режим тригера](#trigger-mode).
 
 Цю конфігурацію найлегше виконати з розділу _QGroundControl_ [Налаштування рухомого засобу > Камера](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/setup_view/camera.html#px4-camera-setup).
@@ -188,16 +188,16 @@ PX4 видає повідомлення MAVLink [CAMERA_TRIGGER](https://mavlink
 
 1. На консолі PX4:
 
-  ```shell
-  camera_trigger test
-  ```
+   ```shell
+   camera_trigger test
+   ```
 
 2. Від _QGroundControl_:
 
-  Клацніть на **Запуск камери** на головній панелі інструментів.
-  Ці знімки не відображаються або не підраховуються для геотегування.
+   Клацніть на **Запуск камери** на головній панелі інструментів.
+   Ці знімки не відображаються або не підраховуються для геотегування.
 
-  ![QGC Тестова Камера](../../assets/camera/qgc_test_camera.png)
+   ![QGC Тестова Камера](../../assets/camera/qgc_test_camera.png)
 
 ## Приклад Sony QX-1 (Фотограметрія)
 
@@ -308,7 +308,7 @@ end
 ### Крок 4
 
 Вам доведеться змінити свій драйвер, щоб дотримуватися схеми послідовності вище.
-Для камер [IDS Imaging UEye](https://github.com/ProjectArtemis/ueye_cam) та для камер, що відповідають стандарту [IEEE1394 compliant](https://github.com/andre-nguyen/camera1394), доступні публічні посилання на референтні реалізації.
+Public reference implementations for [IDS Imaging UEye](https://github.com/anqixu/ueye_cam) cameras and for [IEEE1394 compliant](https://github.com/andre-nguyen/camera1394) cameras are available.
 
 ## Дивіться також
 

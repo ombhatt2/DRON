@@ -20,56 +20,23 @@
 
 #if Z_FEATURE_QUERY == 1 && Z_FEATURE_MULTI_THREAD == 1
 
-int main(int argc, char **argv) {
-    const char *keyexpr = "demo/example/**";
-    const char *mode = "client";
-    const char *clocator = NULL;
-    const char *llocator = NULL;
-    const char *value = NULL;
+static int parse_args(int argc, char **argv, z_owned_config_t *config, char **keyexpr, char **value);
 
-    int opt;
-    while ((opt = getopt(argc, argv, "k:e:m:v:l:")) != -1) {
-        switch (opt) {
-            case 'k':
-                keyexpr = optarg;
-                break;
-            case 'e':
-                clocator = optarg;
-                break;
-            case 'm':
-                mode = optarg;
-                break;
-            case 'l':
-                llocator = optarg;
-                break;
-            case 'v':
-                value = optarg;
-                break;
-            case '?':
-                if (optopt == 'k' || optopt == 'e' || optopt == 'm' || optopt == 'v' || optopt == 'l') {
-                    fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-                } else {
-                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-                }
-                return 1;
-            default:
-                return -1;
-        }
-    }
+int main(int argc, char **argv) {
+    char *keyexpr = "demo/example/**";
+    char *value = NULL;
 
     z_owned_config_t config;
     z_config_default(&config);
-    zp_config_insert(z_loan_mut(config), Z_CONFIG_MODE_KEY, mode);
-    if (clocator != NULL) {
-        zp_config_insert(z_loan_mut(config), Z_CONFIG_CONNECT_KEY, clocator);
-    }
-    if (llocator != NULL) {
-        zp_config_insert(z_loan_mut(config), Z_CONFIG_LISTEN_KEY, llocator);
+
+    int ret = parse_args(argc, argv, &config, &keyexpr, &value);
+    if (ret != 0) {
+        return ret;
     }
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
+    if (z_open(&s, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -77,13 +44,13 @@ int main(int argc, char **argv) {
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_loan_mut(s), NULL) < 0 || zp_start_lease_task(z_loan_mut(s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
 
     z_view_keyexpr_t ke;
     if (z_view_keyexpr_from_str(&ke, keyexpr) < 0) {
-        printf("%s is not a valid key expression", keyexpr);
+        printf("%s is not a valid key expression\n", keyexpr);
         return -1;
     }
 
@@ -93,8 +60,8 @@ int main(int argc, char **argv) {
     // Value encoding
     z_owned_bytes_t payload;
     if (value != NULL) {
-        z_bytes_serialize_from_str(&payload, value);
-        opts.payload = &payload;
+        z_bytes_from_static_str(&payload, value);
+        opts.payload = z_bytes_move(&payload);
     }
     z_owned_closure_reply_t closure;
     z_owned_ring_handler_reply_t handler;
@@ -105,16 +72,16 @@ int main(int argc, char **argv) {
     }
 
     z_owned_reply_t reply;
-    z_null(&reply);
-    for (z_recv(z_loan(handler), &reply); z_check(reply); z_recv(z_loan(handler), &reply)) {
+    for (z_result_t res = z_recv(z_loan(handler), &reply); res == Z_OK; res = z_recv(z_loan(handler), &reply)) {
         if (z_reply_is_ok(z_loan(reply))) {
             const z_loaned_sample_t *sample = z_reply_ok(z_loan(reply));
             z_view_string_t keystr;
             z_keyexpr_as_view_string(z_sample_keyexpr(sample), &keystr);
             z_owned_string_t replystr;
-            z_bytes_deserialize_into_string(z_sample_payload(sample), &replystr);
+            z_bytes_to_string(z_sample_payload(sample), &replystr);
 
-            printf(">> Received ('%s': '%s')\n", z_string_data(z_loan(keystr)), z_string_data(z_loan(replystr)));
+            printf(">> Received ('%.*s': '%.*s')\n", (int)z_string_len(z_loan(keystr)), z_string_data(z_loan(keystr)),
+                   (int)z_string_len(z_loan(replystr)), z_string_data(z_loan(replystr)));
             z_drop(z_move(replystr));
         } else {
             printf(">> Received an error\n");
@@ -122,11 +89,45 @@ int main(int argc, char **argv) {
     }
 
     z_drop(z_move(handler));
-
-    z_close(z_move(s));
-
+    z_drop(z_move(s));
     return 0;
 }
+
+// Note: All args can be specified multiple times. For "-e" it will append the list of endpoints, for the other it will
+// simply replace the previous value.
+static int parse_args(int argc, char **argv, z_owned_config_t *config, char **keyexpr, char **value) {
+    int opt;
+    while ((opt = getopt(argc, argv, "k:v:e:m:l:")) != -1) {
+        switch (opt) {
+            case 'k':
+                *keyexpr = optarg;
+                break;
+            case 'v':
+                *value = optarg;
+                break;
+            case 'e':
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_CONNECT_KEY, optarg);
+                break;
+            case 'm':
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_MODE_KEY, optarg);
+                break;
+            case 'l':
+                zp_config_insert(z_loan_mut(*config), Z_CONFIG_LISTEN_KEY, optarg);
+                break;
+            case '?':
+                if (optopt == 'k' || optopt == 'v' || optopt == 'e' || optopt == 'm' || optopt == 'l') {
+                    fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+                } else {
+                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+                }
+                return 1;
+            default:
+                return -1;
+        }
+    }
+    return 0;
+}
+
 #else
 int main(void) {
     printf(

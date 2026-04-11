@@ -15,15 +15,29 @@
 #ifndef ZENOH_PICO_SYSTEM_WINDOWS_H
 #define ZENOH_PICO_SYSTEM_WINDOWS_H
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <sys/timeb.h>
 #include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
 #include "zenoh-pico/config.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #if Z_FEATURE_MULTI_THREAD == 1
 typedef HANDLE *_z_task_t;
 typedef void *z_task_attr_t;  // Not used in Windows
 typedef SRWLOCK _z_mutex_t;
+typedef CRITICAL_SECTION _z_mutex_rec_t;
 typedef CONDITION_VARIABLE _z_condvar_t;
 #endif  // Z_FEATURE_MULTI_THREAD == 1
 
@@ -46,6 +60,10 @@ typedef struct {
     } _ep;
 } _z_sys_net_endpoint_t;
 
-inline void __asm__(char *asm) { (void)(asm); }
+inline void __asm__(char *instruction) { (void)(instruction); }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ZENOH_PICO_SYSTEM_VOID_H */

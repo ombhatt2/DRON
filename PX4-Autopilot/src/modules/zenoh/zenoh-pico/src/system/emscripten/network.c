@@ -28,13 +28,34 @@
 #include "zenoh-pico/utils/logging.h"
 #include "zenoh-pico/utils/pointers.h"
 
-#if Z_FEATURE_LINK_WS == 1
+z_result_t _z_socket_set_non_blocking(const _z_sys_net_socket_t *sock) {
+    _ZP_UNUSED(sock);
+    _Z_ERROR("Function not yet supported on this system");
+    _Z_ERROR_RETURN(_Z_ERR_GENERIC);
+}
 
+z_result_t _z_socket_accept(const _z_sys_net_socket_t *sock_in, _z_sys_net_socket_t *sock_out) {
+    _ZP_UNUSED(sock_in);
+    _ZP_UNUSED(sock_out);
+    _Z_ERROR("Function not yet supported on this system");
+    _Z_ERROR_RETURN(_Z_ERR_GENERIC);
+}
+
+void _z_socket_close(_z_sys_net_socket_t *sock) { _ZP_UNUSED(sock); }
+
+z_result_t _z_socket_wait_event(void *peers, _z_mutex_rec_t *mutex) {
+    _ZP_UNUSED(peers);
+    _ZP_UNUSED(mutex);
+    _Z_ERROR("Function not yet supported on this system");
+    _Z_ERROR_RETURN(_Z_ERR_GENERIC);
+}
+
+#if Z_FEATURE_LINK_WS == 1
 #define WS_LINK_SLEEP 1
 
 /*------------------ TCP sockets ------------------*/
-int8_t _z_create_endpoint_ws(_z_sys_net_endpoint_t *ep, const char *s_addr, const char *s_port) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_create_endpoint_ws(_z_sys_net_endpoint_t *ep, const char *s_addr, const char *s_port) {
+    z_result_t ret = _Z_RES_OK;
 
     struct addrinfo hints;
     (void)memset(&hints, 0, sizeof(hints));
@@ -44,6 +65,7 @@ int8_t _z_create_endpoint_ws(_z_sys_net_endpoint_t *ep, const char *s_addr, cons
     hints.ai_protocol = IPPROTO_TCP;
 
     if (getaddrinfo(s_addr, s_port, &hints, &ep->_iptcp) < 0) {
+        _Z_ERROR_LOG(_Z_ERR_GENERIC);
         ret = _Z_ERR_GENERIC;
     }
 
@@ -53,14 +75,15 @@ int8_t _z_create_endpoint_ws(_z_sys_net_endpoint_t *ep, const char *s_addr, cons
 void _z_free_endpoint_ws(_z_sys_net_endpoint_t *ep) { freeaddrinfo(ep->_iptcp); }
 
 /*------------------ TCP sockets ------------------*/
-int8_t _z_open_ws(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t rep, uint32_t tout) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_open_ws(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t rep, uint32_t tout) {
+    z_result_t ret = _Z_RES_OK;
 
     sock->_ws._fd = socket(rep._iptcp->ai_family, rep._iptcp->ai_socktype, rep._iptcp->ai_protocol);
     if (sock->_ws._fd != -1) {
         // WARNING: commented because setsockopt is not implemented in emscripten
         // if ((ret == _Z_RES_OK) && (setsockopt(sock->_ws._fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv)) < 0))
         // {
+        _Z_ERROR_LOG(_Z_ERR_GENERIC);
         //     ret = _Z_ERR_GENERIC;
         // }
         sock->_ws._tout = tout;  // We are storing the timeout that we are going to use when sending and receiving
@@ -73,6 +96,7 @@ int8_t _z_open_ws(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t rep, ui
                 // underlying socket is actually open.
 
                 // if (it->ai_next == NULL) {
+                _Z_ERROR_LOG(_Z_ERR_GENERIC);
                 //     ret = _Z_ERR_GENERIC;
                 //     break;
                 // }
@@ -89,18 +113,20 @@ int8_t _z_open_ws(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t rep, ui
             close(sock->_ws._fd);
         }
     } else {
+        _Z_ERROR_LOG(_Z_ERR_GENERIC);
         ret = _Z_ERR_GENERIC;
     }
 
     return ret;
 }
 
-int8_t _z_listen_ws(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t lep) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_listen_ws(_z_sys_net_socket_t *sock, const _z_sys_net_endpoint_t lep) {
+    z_result_t ret = _Z_RES_OK;
     (void)sock;
     (void)lep;
 
     // @TODO: To be implemented
+    _Z_ERROR_LOG(_Z_ERR_GENERIC);
     ret = _Z_ERR_GENERIC;
 
     return ret;
@@ -128,7 +154,7 @@ size_t _z_read_exact_ws(const _z_sys_net_socket_t sock, uint8_t *ptr, size_t len
 
     do {
         size_t rb = _z_read_ws(sock, pos, len - n);
-        if (rb == SIZE_MAX) {
+        if ((rb == SIZE_MAX) || (rb == 0)) {
             n = rb;
             break;
         }

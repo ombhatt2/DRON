@@ -16,6 +16,7 @@
 #include <WiFi.h>
 #include <zenoh-pico.h>
 
+#if Z_FEATURE_SCOUTING == 1
 // WiFi-specific parameters
 #define SSID "SSID"
 #define PASS "PASS"
@@ -56,7 +57,7 @@ void fprintlocators(const z_loaned_string_array_t *locs) {
     for (unsigned int i = 0; i < len; i++) {
         Serial.print("'");
         const z_loaned_string_t *str = z_string_array_get(locs, i);
-        Serial.print(str->val);
+        Serial.write(z_string_data(str), z_string_len(str));
         Serial.print("'");
         if (i < len - 1) {
             Serial.print(", ");
@@ -71,11 +72,11 @@ void fprinthello(const z_loaned_hello_t *hello) {
     Serial.print(", whatami: ");
     fprintwhatami(z_hello_whatami(hello));
     Serial.print(", locators: ");
-    fprintlocators(z_hello_locators(hello));
+    fprintlocators(zp_hello_locators(hello));
     Serial.println(" }");
 }
 
-void callback(const z_loaned_hello_t *hello, void *context) {
+void callback(z_loaned_hello_t *hello, void *context) {
     fprinthello(hello);
     Serial.println("");
     (*(int *)context)++;
@@ -118,3 +119,10 @@ void loop() {
     printf("Scouting...\n");
     z_scout(z_config_move(&config), z_closure_hello_move(&closure), NULL);
 }
+#else
+void setup() {
+    Serial.println("ERROR: Zenoh pico was compiled without Z_FEATURE_SCOUTING but this example requires it.");
+    return;
+}
+void loop() {}
+#endif

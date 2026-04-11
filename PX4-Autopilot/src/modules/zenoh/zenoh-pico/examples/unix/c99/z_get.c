@@ -29,16 +29,17 @@ void reply_dropper(void *ctx) {
     z_condvar_drop(z_condvar_move(&cond));
 }
 
-void reply_handler(const z_loaned_reply_t *reply, void *ctx) {
+void reply_handler(z_loaned_reply_t *reply, void *ctx) {
     (void)(ctx);
     if (z_reply_is_ok(reply)) {
         const z_loaned_sample_t *sample = z_reply_ok(reply);
         z_view_string_t keystr;
         z_keyexpr_as_view_string(z_sample_keyexpr(sample), &keystr);
         z_owned_string_t replystr;
-        z_bytes_deserialize_into_string(z_sample_payload(sample), &replystr);
+        z_bytes_to_string(z_sample_payload(sample), &replystr);
 
-        printf(">> Received ('%s': '%s')\n", z_string_data(z_view_string_loan(&keystr)),
+        printf(">> Received ('%.*s': '%.*s')\n", (int)z_string_len(z_view_string_loan(&keystr)),
+               z_string_data(z_view_string_loan(&keystr)), (int)z_string_len(z_string_loan(&replystr)),
                z_string_data(z_string_loan(&replystr)));
         z_string_drop(z_string_move(&replystr));
     } else {
@@ -98,7 +99,7 @@ int main(int argc, char **argv) {
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_config_move(&config)) < 0) {
+    if (z_open(&s, z_config_move(&config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -106,13 +107,13 @@ int main(int argc, char **argv) {
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_session_loan_mut(&s), NULL) < 0 || zp_start_lease_task(z_session_loan_mut(&s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
 
     z_view_keyexpr_t ke;
     if (z_view_keyexpr_from_str(&ke, keyexpr) < 0) {
-        printf("%s is not a valid key expression", keyexpr);
+        printf("%s is not a valid key expression\n", keyexpr);
         return -1;
     }
 
@@ -123,8 +124,8 @@ int main(int argc, char **argv) {
     // Value encoding
     z_owned_bytes_t payload;
     if (value != NULL) {
-        z_bytes_serialize_from_str(&payload, value);
-        opts.payload = &payload;
+        z_bytes_from_static_str(&payload, value);
+        opts.payload = z_bytes_move(&payload);
     }
     z_owned_closure_reply_t callback;
     z_closure_reply(&callback, reply_handler, reply_dropper, NULL);
@@ -135,7 +136,7 @@ int main(int argc, char **argv) {
     z_condvar_wait(z_condvar_loan_mut(&cond), z_mutex_loan_mut(&mutex));
     z_mutex_unlock(z_mutex_loan_mut(&mutex));
 
-    z_close(z_session_move(&s));
+    z_session_drop(z_session_move(&s));
 
     return 0;
 }

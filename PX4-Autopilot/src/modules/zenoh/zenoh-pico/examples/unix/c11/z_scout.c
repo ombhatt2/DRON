@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <zenoh-pico.h>
 
+#if Z_FEATURE_SCOUTING == 1
 void fprintzid(FILE *stream, z_id_t zid) {
     unsigned int zidlen = _z_id_len(zid);
     if (zidlen == 0) {
@@ -42,7 +43,7 @@ void fprintlocators(FILE *stream, const z_loaned_string_array_t *locs) {
     for (unsigned int i = 0; i < z_string_array_len(locs); i++) {
         fprintf(stream, "\"");
         const z_loaned_string_t *str = z_string_array_get(locs, i);
-        fprintf(stream, "%.*s", (int)str->len, str->val);
+        fprintf(stream, "%.*s", (int)z_string_len(str), z_string_data(str));
         fprintf(stream, "\"");
         if (i < z_string_array_len(locs) - 1) {
             fprintf(stream, ", ");
@@ -57,11 +58,11 @@ void fprinthello(FILE *stream, const z_loaned_hello_t *hello) {
     fprintf(stream, ", whatami: ");
     fprintwhatami(stream, z_hello_whatami(hello));
     fprintf(stream, ", locators: ");
-    fprintlocators(stream, z_hello_locators(hello));
+    fprintlocators(stream, zp_hello_locators(hello));
     fprintf(stream, " }");
 }
 
-void callback(const z_loaned_hello_t *hello, void *context) {
+void callback(z_loaned_hello_t *hello, void *context) {
     fprinthello(stdout, hello);
     fprintf(stdout, "\n");
     (*(int *)context)++;
@@ -92,3 +93,9 @@ int main(int argc, char **argv) {
     sleep(1);
     return 0;
 }
+#else
+int main(void) {
+    printf("ERROR: Zenoh pico was compiled without Z_FEATURE_SCOUTING but this example requires it.\n");
+    return -2;
+}
+#endif

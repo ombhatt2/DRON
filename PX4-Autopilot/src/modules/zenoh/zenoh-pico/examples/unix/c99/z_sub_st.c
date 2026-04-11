@@ -23,13 +23,14 @@
 
 static int msg_nb = 0;
 
-void data_handler(const z_loaned_sample_t *sample, void *arg) {
+void data_handler(z_loaned_sample_t *sample, void *arg) {
     (void)(arg);
     z_view_string_t keystr;
     z_keyexpr_as_view_string(z_sample_keyexpr(sample), &keystr);
     z_owned_string_t value;
-    z_bytes_deserialize_into_string(z_sample_payload(sample), &value);
-    printf(">> [Subscriber] Received ('%s': '%s')\n", z_string_data(z_view_string_loan(&keystr)),
+    z_bytes_to_string(z_sample_payload(sample), &value);
+    printf(">> [Subscriber] Received ('%.*s': '%.*s')\n", (int)z_string_len(z_view_string_loan(&keystr)),
+           z_string_data(z_view_string_loan(&keystr)), (int)z_string_len(z_string_loan(&value)),
            z_string_data(z_string_loan(&value)));
     z_string_drop(z_string_move(&value));
     msg_nb++;
@@ -84,7 +85,7 @@ int main(int argc, char **argv) {
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_config_move(&config)) < 0) {
+    if (z_open(&s, z_config_move(&config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -95,8 +96,11 @@ int main(int argc, char **argv) {
     printf("Declaring Subscriber on '%s'...\n", keyexpr);
     z_owned_subscriber_t sub;
     z_view_keyexpr_t ke;
-    z_view_keyexpr_from_str(&ke, keyexpr);
-    if (z_declare_subscriber(&sub, z_session_loan(&s), z_view_keyexpr_loan(&ke), z_closure_sample_move(&callback),
+    if (z_view_keyexpr_from_str(&ke, keyexpr) < 0) {
+        printf("%s is not a valid key expression\n", keyexpr);
+        return -1;
+    }
+    if (z_declare_subscriber(z_session_loan(&s), &sub, z_view_keyexpr_loan(&ke), z_closure_sample_move(&callback),
                              NULL) < 0) {
         printf("Unable to declare subscriber.\n");
         return -1;
@@ -108,8 +112,8 @@ int main(int argc, char **argv) {
         zp_send_keep_alive(z_session_loan(&s), NULL);
         zp_send_join(z_session_loan(&s), NULL);
     }
-    z_undeclare_subscriber(z_subscriber_move(&sub));
-    z_close(z_session_move(&s));
+    z_subscriber_drop(z_subscriber_move(&sub));
+    z_session_drop(z_session_move(&s));
     return 0;
 }
 #else

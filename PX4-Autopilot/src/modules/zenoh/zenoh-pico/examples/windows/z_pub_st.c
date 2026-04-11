@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_move(config)) < 0) {
+    if (z_open(&s, z_move(config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -46,11 +46,16 @@ int main(int argc, char **argv) {
     printf("Declaring publisher for '%s'...\n", keyexpr);
     z_owned_publisher_t pub;
     z_view_keyexpr_t ke;
-    z_view_keyexpr_from_str(&ke, keyexpr);
-    if (z_declare_publisher(&pub, z_loan(s), z_loan(ke), NULL) < 0) {
+    if (z_view_keyexpr_from_str(&ke, keyexpr) < 0) {
+        printf("%s is not a valid key expression\n", keyexpr);
+        return -1;
+    }
+    if (z_declare_publisher(z_loan(s), &pub, z_loan(ke), NULL) < 0) {
         printf("Unable to declare publisher for key expression!\n");
         return -1;
     }
+    // Read received declaration
+    zp_read(z_loan(s), NULL);
 
     printf("Press CTRL-C to quit...\n");
     char *buf = (char *)malloc(256);
@@ -62,7 +67,7 @@ int main(int argc, char **argv) {
 
             // Create payload
             z_owned_bytes_t payload;
-            z_bytes_serialize_from_str(&payload, buf);
+            z_bytes_copy_from_str(&payload, buf);
 
             z_publisher_put(z_loan(pub), z_move(payload), NULL);
             ++idx;
@@ -75,9 +80,9 @@ int main(int argc, char **argv) {
         zp_send_join(z_loan(s), NULL);
     }
 
-    z_undeclare_publisher(z_move(pub));
+    z_drop(z_move(pub));
 
-    z_close(z_move(s));
+    z_drop(z_move(s));
 
     free(buf);
     return 0;

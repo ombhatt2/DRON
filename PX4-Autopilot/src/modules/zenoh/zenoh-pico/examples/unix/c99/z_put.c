@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 
     printf("Opening session...\n");
     z_owned_session_t s;
-    if (z_open(&s, z_config_move(&config)) < 0) {
+    if (z_open(&s, z_config_move(&config), NULL) < 0) {
         printf("Unable to open session!\n");
         return -1;
     }
@@ -77,23 +77,26 @@ int main(int argc, char **argv) {
     // Start read and lease tasks for zenoh-pico
     if (zp_start_read_task(z_session_loan_mut(&s), NULL) < 0 || zp_start_lease_task(z_session_loan_mut(&s), NULL) < 0) {
         printf("Unable to start read and lease tasks\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
 
     printf("Declaring key expression '%s'...\n", keyexpr);
     z_view_keyexpr_t vke;
-    z_view_keyexpr_from_str(&vke, keyexpr);
+    if (z_view_keyexpr_from_str(&vke, keyexpr) < 0) {
+        printf("%s is not a valid key expression\n", keyexpr);
+        return -1;
+    }
     z_owned_keyexpr_t ke;
-    if (z_declare_keyexpr(&ke, z_session_loan(&s), z_view_keyexpr_loan(&vke)) < 0) {
+    if (z_declare_keyexpr(z_session_loan(&s), &ke, z_view_keyexpr_loan(&vke)) < 0) {
         printf("Unable to declare key expression!\n");
-        z_close(z_session_move(&s));
+        z_session_drop(z_session_move(&s));
         return -1;
     }
 
     // Create payload
     z_owned_bytes_t payload;
-    z_bytes_serialize_from_str(&payload, value);
+    z_bytes_from_static_str(&payload, value);
 
     printf("Putting Data ('%s': '%s')...\n", keyexpr, value);
     if (z_put(z_session_loan(&s), z_keyexpr_loan(&ke), z_bytes_move(&payload), NULL) < 0) {
@@ -101,8 +104,8 @@ int main(int argc, char **argv) {
     }
 
     // Clean up
-    z_undeclare_keyexpr(z_keyexpr_move(&ke), z_session_loan(&s));
-    z_close(z_session_move(&s));
+    z_undeclare_keyexpr(z_session_loan(&s), z_keyexpr_move(&ke));
+    z_session_drop(z_session_move(&s));
     return 0;
 }
 #else

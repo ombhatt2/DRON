@@ -19,26 +19,33 @@
 #include "zenoh-pico/net/session.h"
 #include "zenoh-pico/protocol/core.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Return type when declaring a publisher.
  */
 typedef struct _z_publisher_t {
     _z_keyexpr_t _key;
     _z_zint_t _id;
-    _z_session_rc_t _zn;
+    _z_session_weak_t _zn;
+    _z_encoding_t _encoding;
     z_congestion_control_t _congestion_control;
     z_priority_t _priority;
-    _Bool _is_express;
-#if Z_FEATURE_INTEREST == 1
+    z_reliability_t reliability;
+    bool _is_express;
     _z_write_filter_t _filter;
-#endif
 } _z_publisher_t;
 
 #if Z_FEATURE_PUBLICATION == 1
-void _z_publisher_clear(_z_publisher_t *pub);
-void _z_publisher_free(_z_publisher_t **pub);
-_Bool _z_publisher_check(const _z_publisher_t *publisher);
-_z_publisher_t _z_publisher_null(void);
+// Warning: None of the sub-types require a non-0 initialization. Add a init function if it changes.
+static inline _z_publisher_t _z_publisher_null(void) { return (_z_publisher_t){0}; }
+static inline bool _z_publisher_check(const _z_publisher_t *publisher) { return !_Z_RC_IS_NULL(&publisher->_zn); }
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* INCLUDE_ZENOH_PICO_NET_PUBLISH_H */

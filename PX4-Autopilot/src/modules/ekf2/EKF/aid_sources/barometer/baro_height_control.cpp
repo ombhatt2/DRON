@@ -40,15 +40,12 @@
 
 void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 {
+	_fc.baro.available = (_params.ekf2_baro_ctrl != 0);
+
 	static constexpr const char *HGT_SRC_NAME = "baro";
 
 	auto &aid_src = _aid_src_baro_hgt;
 	HeightBiasEstimator &bias_est = _baro_b_est;
-
-	if (_params.ekf2_baro_ctrl == 0) {
-		stopBaroHgtFusion();
-		return;
-	}
 
 	bias_est.predict(_dt_ekf_avg);
 
@@ -116,7 +113,7 @@ void Ekf::controlBaroHeightFusion(const imuSample &imu_sample)
 		}
 
 		// determine if we should use height aiding
-		const bool continuing_conditions_passing = (_params.ekf2_baro_ctrl == 1)
+		const bool continuing_conditions_passing = _fc.baro.intended()
 				&& measurement_valid
 				&& (_baro_counter > _obs_buffer_length)
 				&& !_control_status.flags.baro_fault;

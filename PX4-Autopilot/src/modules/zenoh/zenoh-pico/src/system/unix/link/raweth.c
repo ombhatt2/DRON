@@ -14,6 +14,8 @@
 
 #include "zenoh-pico/system/link/raweth.h"
 
+#if Z_FEATURE_RAWETH_TRANSPORT == 1
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <ifaddrs.h>
@@ -32,12 +34,9 @@
 #include "zenoh-pico/collections/string.h"
 #include "zenoh-pico/config.h"
 #include "zenoh-pico/protocol/keyexpr.h"
-#include "zenoh-pico/system/link/raweth.h"
 #include "zenoh-pico/system/platform/unix.h"
 #include "zenoh-pico/utils/logging.h"
 #include "zenoh-pico/utils/pointers.h"
-
-#if Z_FEATURE_RAWETH_TRANSPORT == 1
 
 #if !defined(__linux)
 #error "Raweth transport only supported on linux systems"
@@ -46,19 +45,19 @@
 
 void _z_raweth_clear_mapping_entry(_zp_raweth_mapping_entry_t *entry) { _z_keyexpr_clear(&entry->_keyexpr); }
 
-int8_t _z_open_raweth(_z_sys_net_socket_t *sock, const char *interface) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_open_raweth(_z_sys_net_socket_t *sock, const char *interface) {
+    z_result_t ret = _Z_RES_OK;
     // Open a raw network socket in promiscuous mode
     sock->_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock->_fd == -1) {
-        return _Z_ERR_GENERIC;
+        _Z_ERROR_RETURN(_Z_ERR_GENERIC);
     }
     // Get the index of the interface to send on
     struct ifreq if_idx;
     memset(&if_idx, 0, sizeof(struct ifreq));
     strncpy(if_idx.ifr_name, interface, strlen(interface));
     if (ioctl(sock->_fd, SIOCGIFINDEX, &if_idx) < 0) {
-        return _Z_ERR_GENERIC;
+        _Z_ERROR_RETURN(_Z_ERR_GENERIC);
     }
     // Bind the socket
     struct sockaddr_ll addr;
@@ -70,14 +69,16 @@ int8_t _z_open_raweth(_z_sys_net_socket_t *sock, const char *interface) {
 
     if (bind(sock->_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
         close(sock->_fd);
+        _Z_ERROR_LOG(_Z_ERR_GENERIC);
         ret = _Z_ERR_GENERIC;
     }
     return ret;
 }
 
-int8_t _z_close_raweth(_z_sys_net_socket_t *sock) {
-    int8_t ret = _Z_RES_OK;
+z_result_t _z_close_raweth(_z_sys_net_socket_t *sock) {
+    z_result_t ret = _Z_RES_OK;
     if (close(sock->_fd) != 0) {
+        _Z_ERROR_LOG(_Z_ERR_GENERIC);
         ret = _Z_ERR_GENERIC;
     }
     return ret;
@@ -96,10 +97,10 @@ size_t _z_receive_raweth(const _z_sys_net_socket_t *sock, void *buff, size_t buf
                          const _zp_raweth_whitelist_array_t *whitelist) {
     // Read from socket
     ssize_t bytesRead = recvfrom(sock->_fd, buff, buff_len, 0, NULL, NULL);
-    if ((bytesRead < 0) || (bytesRead < (ssize_t)sizeof(_zp_eth_header_t))) {
+    if ((bytesRead <= 0) || (bytesRead < (ssize_t)sizeof(_zp_eth_header_t))) {
         return SIZE_MAX;
     }
-    _Bool is_valid = true;
+    bool is_valid = true;
     // Address filtering (only if there is a whitelist)
     if (_zp_raweth_whitelist_array_len(whitelist) > 0) {
         is_valid = false;
@@ -119,7 +120,7 @@ size_t _z_receive_raweth(const _z_sys_net_socket_t *sock, void *buff, size_t buf
     // Copy sender mac if needed
     if (addr != NULL) {
         uint8_t *header_addr = (uint8_t *)buff;
-        *addr = _z_slice_make(sizeof(ETH_ALEN));
+        addr->len = sizeof(ETH_ALEN);
         (void)memcpy((uint8_t *)addr->start, (header_addr + ETH_ALEN), sizeof(ETH_ALEN));
     }
     return (size_t)bytesRead;
