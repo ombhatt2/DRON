@@ -5,6 +5,8 @@ The DRON Project is a tool designed to aid first responders in their response to
 ## Table of Contents
 
 - [Project Overview](#project-overview)
+
+- [Flight Videos](#flight-test-videos)
 - [Poster](#project-poster)
 - [Team Members](#team-members)
 - [Getting Started](#getting-started)
@@ -52,9 +54,16 @@ The primary objectives of this project are as follows:
 - Collaberate between drones for decision making and obstacle detection.
 - Communicate live data to the first responders in an easy to understand format.
 
+## Flight Test Videos
+
+https://github.com/user-attachments/assets/b51cd1a6-a516-4e84-9459-9f7f23fdade3
+
+https://github.com/user-attachments/assets/e583ee48-7b87-49e9-ae21-030e9a4f5374
+
 ## Project Poster
 
-![Poster-Spring-2025](resources/DRON-Poster-Spring-2025.png)
+![Poster-Spring-2025](resources/DRON-Poster-Fall-2025.png)
+
 
 ## Team Members
 
@@ -66,8 +75,13 @@ The primary objectives of this project are as follows:
 
 - **[Aidan Briggs](https://www.linkedin.com/in/aidan-briggs-108297250/)**
   - Major: Computer Science
-  - Role: Software Subteam Lead
+  - Role: Visualization Subteam Lead
   - Year: Senior
+
+- **[Chris Ambroziak](https://www.linkedin.com/in/chris-ambroziak/)**
+  - Major: Computer Engineering
+  - Role: Autonomy Subteam Lead
+  - Year: Junior
 
 - **[Jacob Fuerst](https://www.linkedin.com/in/jacob-fuerst)**
   - Major: Mechanical Engineering
@@ -97,6 +111,14 @@ The primary objectives of this project are as follows:
   - Major: General Engineering
   - Year: Freshman
 
+- **[Luke Breedlove](https://www.linkedin.com/in/luke-breedlove-8a5007325)**
+  - Major: Mechanical Engineering
+  - Year: Sophomore
+
+- **[Charlie Weatherspoon](https://www.linkedin.com/in/cweatherspoon397)**
+  - Major: Mechanical Engineering
+  - Year: Sophomore
+
 ### Software Subteam
 
 - **[Treasa Francis](https://www.linkedin.com/in/treasafrancis/)**
@@ -114,6 +136,24 @@ The primary objectives of this project are as follows:
 - **[Owen Thomas](https://www.linkedin.com/in/owen-thomas-44aa4230a/)**
   - Major: Computer Science
   - Year: Junior
+
+- **[Om Bhatt](https://www.linkedin.com/in/ombhattofficial)**
+  - Major: Mechatronics Engineering
+  - Year: Sophomore
+
+- **[Riya Shah](https://www.linkedin.com/in/riya-shah-448318368)**
+  - Major: Electrical Engineering
+  - Year: Sophomore
+  
+- **[Matthew Shi](https://www.linkedin.com/in/matthewtershi)**
+  - Major: Computer Engineering
+  - Year: Sophomore
+
+- **[Visith So](https://www.linkedin.com/in/visith-so-b28ab9186)**
+  - Major: Computer Engineering
+  - Year: Junior
+
+    
 
 ### Electrical Subteam
 
